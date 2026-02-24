@@ -15,3 +15,5 @@ models:
 output:
   format: markdown
   include_metadata: true
+debug:
+  enabled: true

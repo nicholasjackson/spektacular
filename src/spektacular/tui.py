@@ -341,6 +341,7 @@ class PlanTUI(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("t", "cycle_theme", "Theme"),
+        ("f", "enable_follow", "Follow"),
     ]
 
     def __init__(
@@ -359,6 +360,8 @@ class PlanTUI(App):
         self._theme_index = _THEME_ORDER.index("dracula")
         self._pending_questions: list[Question] = []
         self._pending_answers: list[str] = []
+        self._follow_mode: bool = True
+        self._current_status: str = ""
 
         for t in _TEXTUAL_THEMES.values():
             self.register_theme(t)
@@ -372,23 +375,43 @@ class PlanTUI(App):
             yield RichLog(id="output", highlight=True, markup=True)
         yield Static("", id="tool-area")
         yield Vertical(id="question-area")
-        yield Static(f"* thinking  {self.spec_path.name}", id="status")
+        yield Static("", id="status")
 
     def on_mount(self) -> None:
         self.theme = "dracula"
+        self._set_status(f"* thinking  {self.spec_path.name}")
         spec_content = self.spec_path.read_text(encoding="utf-8")
         agent_prompt = load_agent_prompt()
         knowledge = load_knowledge(self.project_path)
         prompt = build_prompt(spec_content, agent_prompt, knowledge)
+        if self.config.debug.enabled:
+            self.plan_dir.mkdir(parents=True, exist_ok=True)
+            (self.plan_dir / "prompt.md").write_text(prompt, encoding="utf-8")
         self._run_agent(prompt)
+
+    def _set_status(self, text: str) -> None:
+        self._current_status = text
+        follow_hint = "f: disable follow" if self._follow_mode else "f: enable follow"
+        self.query_one("#status", Static).update(f"{text}  [dim]{follow_hint}[/dim]")
+
+    def _scroll_to_bottom(self) -> None:
+        if self._follow_mode:
+            self.query_one("#output-scroll", VerticalScroll).scroll_end(animate=False)
+
+    def on_mouse_scroll_up(self, event) -> None:
+        self._follow_mode = False
+        self._set_status(self._current_status)
+
+    def action_enable_follow(self) -> None:
+        self._follow_mode = True
+        self._set_status(self._current_status)
+        self.query_one("#output-scroll", VerticalScroll).scroll_end(animate=False)
 
     def action_cycle_theme(self) -> None:
         self._theme_index = (self._theme_index + 1) % len(_THEME_ORDER)
         name = _THEME_ORDER[self._theme_index]
         self.theme = name
-        self.query_one("#status", Static).update(
-            f"theme: {name}  (t to cycle)"
-        )
+        self._set_status(f"theme: {name}  (t to cycle)")
 
     @work(thread=True)
     def _run_agent(self, prompt: str) -> None:
@@ -397,7 +420,8 @@ class PlanTUI(App):
 
         try:
             for event in run_claude(
-                prompt, self.config, self._session_id, self.project_path
+                prompt, self.config, self._session_id, self.project_path,
+                command="plan",
             ):
                 if event.session_id:
                     self._session_id = event.session_id
@@ -460,6 +484,7 @@ class PlanTUI(App):
         grid.add_column()
         grid.add_row(Text("•", style=p.output), self._render_markdown(message.text))
         self.query_one("#output", RichLog).write(grid)
+        self._scroll_to_bottom()
 
     def on_agent_question(self, message: AgentQuestion) -> None:
         self._pending_questions = list(message.questions)
@@ -470,7 +495,7 @@ class PlanTUI(App):
         area = self.query_one("#question-area", Vertical)
         area.query("*").remove()
         area.mount(QuestionPanel(self._pending_questions, self._palette))
-        self.query_one("#status", Static).update("? waiting for answer")
+        self._set_status("? waiting for answer")
 
     def on_answer_selected(self, message: AnswerSelected) -> None:
         if not self._pending_questions:
@@ -481,13 +506,12 @@ class PlanTUI(App):
         self.query_one("#output", RichLog).write(
             Text(f"> {message.answer}", style=p.answer)
         )
+        self._scroll_to_bottom()
         if self._pending_questions:
             self._show_next_question()
         else:
             self.query_one("#question-area", Vertical).query("*").remove()
-            self.query_one("#status", Static).update(
-                f"* thinking  {self.spec_path.name}"
-            )
+            self._set_status(f"* thinking  {self.spec_path.name}")
             self._run_agent("\n".join(self._pending_answers))
 
     def on_agent_complete(self, message: AgentComplete) -> None:
@@ -496,7 +520,8 @@ class PlanTUI(App):
         self.query_one("#output", RichLog).write(
             Text(f"• plan written to {message.plan_dir}/plan.md", style=p.success)
         )
-        self.query_one("#status", Static).update("done  press q to exit")
+        self._set_status("done  press q to exit")
+        self._scroll_to_bottom()
         self.result_plan_dir = message.plan_dir
 
     def on_agent_error(self, message: AgentError) -> None:
@@ -505,7 +530,8 @@ class PlanTUI(App):
         self.query_one("#output", RichLog).write(
             Text(f"• {message.error}", style=p.error)
         )
-        self.query_one("#status", Static).update("error  press q to exit")
+        self._set_status("error  press q to exit")
+        self._scroll_to_bottom()
 
 
 def run_plan_tui(

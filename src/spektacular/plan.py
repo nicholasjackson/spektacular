@@ -75,6 +75,10 @@ def run_plan(
     spec_name = spec_path.stem
     plan_dir = project_path / ".spektacular" / "plans" / spec_name
 
+    if config.debug.enabled:
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        (plan_dir / "prompt.md").write_text(prompt, encoding="utf-8")
+
     session_id = None
     final_result = None
 
@@ -84,7 +88,7 @@ def run_plan(
     current_prompt = prompt
     while True:
         questions_found = []
-        for event in run_claude(current_prompt, config, session_id, project_path):
+        for event in run_claude(current_prompt, config, session_id, project_path, command="plan"):
             if event.session_id:
                 session_id = event.session_id
             if text := event.text_content:

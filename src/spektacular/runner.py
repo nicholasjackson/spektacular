@@ -6,6 +6,7 @@ import re
 import subprocess
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Generator
 
@@ -100,11 +101,24 @@ def build_prompt(
     return "\n".join(parts)
 
 
+def _open_debug_log(config: SpektacularConfig, command: str, cwd: Path) -> io.TextIOBase | None:
+    """Open a debug log file if debug is enabled. Returns file handle or None."""
+    if not config.debug.enabled:
+        return None
+    log_dir = cwd / config.debug.log_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    tool_name = config.agent.command
+    filename = f"{timestamp}_{tool_name}_{command}.log"
+    return open(log_dir / filename, "w", encoding="utf-8")
+
+
 def run_claude(
     prompt: str,
     config: SpektacularConfig,
     session_id: str | None = None,
     cwd: Path | None = None,
+    command: str = "unknown",
 ) -> Generator[ClaudeEvent, None, None]:
     """Spawn claude process and yield parsed events."""
     cmd = [config.agent.command, "-p", prompt]
@@ -119,12 +133,14 @@ def run_claude(
     if session_id:
         cmd.extend(["--resume", session_id])
 
+    effective_cwd = cwd or Path.cwd()
+
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=cwd or Path.cwd(),
+        cwd=effective_cwd,
     )
 
     stderr_buf = io.StringIO()
@@ -136,19 +152,27 @@ def run_claude(
     stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
     stderr_thread.start()
 
-    for line in (process.stdout or []):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-            yield ClaudeEvent(type=data.get("type", "unknown"), data=data)
-        except json.JSONDecodeError:
-            continue
+    debug_log = _open_debug_log(config, command, effective_cwd)
+    try:
+        for line in (process.stdout or []):
+            line = line.strip()
+            if not line:
+                continue
+            if debug_log:
+                debug_log.write(line + "\n")
+                debug_log.flush()
+            try:
+                data = json.loads(line)
+                yield ClaudeEvent(type=data.get("type", "unknown"), data=data)
+            except json.JSONDecodeError:
+                continue
 
-    stderr_thread.join()
-    process.wait()
-    if process.returncode != 0:
-        raise RuntimeError(
-            f"Claude process exited with code {process.returncode}: {stderr_buf.getvalue()}"
-        )
+        stderr_thread.join()
+        process.wait()
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"Claude process exited with code {process.returncode}: {stderr_buf.getvalue()}"
+            )
+    finally:
+        if debug_log:
+            debug_log.close()

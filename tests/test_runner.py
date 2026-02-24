@@ -13,7 +13,7 @@ from spektacular.runner import (
     detect_questions,
     run_claude,
 )
-from spektacular.config import SpektacularConfig
+from spektacular.config import DebugConfig, SpektacularConfig
 
 
 class TestClaudeEvent:
@@ -153,3 +153,57 @@ class TestRunClaude:
 
         assert len(result) == 1
         assert result[0].type == "result"
+
+
+class TestDebugLogging:
+    def test_creates_log_file_when_debug_enabled(self, tmp_path):
+        config = SpektacularConfig(debug=DebugConfig(enabled=True, log_dir=".spektacular/logs"))
+        events = [
+            json.dumps({"type": "system", "session_id": "s1"}),
+            json.dumps({"type": "result", "result": "done", "is_error": False}),
+        ]
+        mock_process = MagicMock()
+        mock_process.stdout = iter(events)
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+
+        with patch("spektacular.runner.subprocess.Popen", return_value=mock_process):
+            list(run_claude("prompt", config, cwd=tmp_path, command="plan"))
+
+        log_dir = tmp_path / ".spektacular" / "logs"
+        assert log_dir.exists()
+        log_files = list(log_dir.glob("*_claude_plan.log"))
+        assert len(log_files) == 1
+        content = log_files[0].read_text()
+        assert '"type": "system"' in content
+        assert '"type": "result"' in content
+
+    def test_no_log_file_when_debug_disabled(self, tmp_path):
+        config = SpektacularConfig()
+        events = [json.dumps({"type": "result", "result": "done", "is_error": False})]
+        mock_process = MagicMock()
+        mock_process.stdout = iter(events)
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+
+        with patch("spektacular.runner.subprocess.Popen", return_value=mock_process):
+            list(run_claude("prompt", config, cwd=tmp_path, command="plan"))
+
+        log_dir = tmp_path / ".spektacular" / "logs"
+        assert not log_dir.exists()
+
+    def test_log_filename_includes_command_and_tool(self, tmp_path):
+        config = SpektacularConfig(debug=DebugConfig(enabled=True))
+        config.agent.command = "my-agent"
+        events = [json.dumps({"type": "result", "result": "ok", "is_error": False})]
+        mock_process = MagicMock()
+        mock_process.stdout = iter(events)
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+
+        with patch("spektacular.runner.subprocess.Popen", return_value=mock_process):
+            list(run_claude("prompt", config, cwd=tmp_path, command="run"))
+
+        log_dir = tmp_path / ".spektacular" / "logs"
+        log_files = list(log_dir.glob("*_my-agent_run.log"))
+        assert len(log_files) == 1

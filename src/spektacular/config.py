@@ -44,6 +44,12 @@ class OutputConfig(BaseModel):
     include_metadata: bool = Field(default=True, description="Include metadata in output")
 
 
+class DebugConfig(BaseModel):
+    """Debug configuration settings."""
+    enabled: bool = Field(default=False, description="Enable debug logging of raw agent output")
+    log_dir: str = Field(default=".spektacular/logs", description="Directory for debug log files")
+
+
 class AgentConfig(BaseModel):
     """Agent configuration for the coding tool."""
     command: str = Field(default="claude", description="The coding agent CLI command to execute")
@@ -67,6 +73,7 @@ class SpektacularConfig(BaseModel):
     complexity: ComplexityConfig = Field(default_factory=ComplexityConfig, description="Complexity analysis")
     output: OutputConfig = Field(default_factory=OutputConfig, description="Output settings")
     agent: AgentConfig = Field(default_factory=AgentConfig, description="Agent settings")
+    debug: DebugConfig = Field(default_factory=DebugConfig, description="Debug settings")
     
     @classmethod
     def from_yaml_file(cls, config_path: Path) -> "SpektacularConfig":
