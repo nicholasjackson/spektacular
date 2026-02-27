@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 /home/nicj/.claude/skills/iw-git-workflow/scripts/check_clean.py)"
+    ]
+  }
+}

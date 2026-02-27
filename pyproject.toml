@@ -3,6 +3,9 @@ name = "spektacular"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
+
+[project.scripts]
+spektacular = "spektacular.cli:main"
 dependencies = [
     "anthropic>=0.82.0",
     "click>=8.3.1",
