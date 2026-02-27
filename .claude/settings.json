@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(go *)",
+      "Bash(go build ./...)",
+      "Bash(make *)",
+      "Bash(./spektacular *)",
+      "Bash(claude -p \"say hello\" --output-format stream-json --verbose)"
+    ],
+    "additionalDirectories": [
+      "/home/nicj/code/github.com/nicholasjackson/spektacular"
+    ]
+  }
+}
