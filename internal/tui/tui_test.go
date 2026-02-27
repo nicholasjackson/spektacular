@@ -10,6 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testWorkflow(label string) Workflow {
+	return Workflow{StatusLabel: label}
+}
+
 func TestToolDescription_KnownTool(t *testing.T) {
 	desc := toolDescription("Bash", map[string]any{"command": "ls -la"})
 	require.Contains(t, desc, "Bash")
@@ -47,17 +51,22 @@ func TestGlamourStyle_Other_ReturnsDark(t *testing.T) {
 }
 
 func TestCurrentPalette_DefaultIsDracula(t *testing.T) {
-	m := initialModel("spec.md", "/tmp", config.NewDefault())
+	m := initialModel(testWorkflow("spec.md"), "/tmp", config.NewDefault())
 	p := m.currentPalette()
 	require.Equal(t, palettes["dracula"], p)
 }
 
 func TestThemeCycling_AdvancesIndex(t *testing.T) {
-	m := initialModel("spec.md", "/tmp", config.NewDefault())
+	m := initialModel(testWorkflow("spec.md"), "/tmp", config.NewDefault())
 	initial := themeOrder[m.themeIdx]
 	m.themeIdx = (m.themeIdx + 1) % len(themeOrder)
 	next := themeOrder[m.themeIdx]
 	require.NotEqual(t, initial, next)
+}
+
+func TestInitialModel_StatusLabelInStatusText(t *testing.T) {
+	m := initialModel(testWorkflow("my-plan"), "/tmp", config.NewDefault())
+	require.Contains(t, m.statusText, "my-plan")
 }
 
 func TestBulletPrefix_SingleLine(t *testing.T) {
@@ -84,7 +93,7 @@ func TestBulletPrefix_EmptyRendered(t *testing.T) {
 }
 
 func TestWithLine_AccumulatesContent(t *testing.T) {
-	m := initialModel("spec.md", "/tmp", config.NewDefault())
+	m := initialModel(testWorkflow("spec.md"), "/tmp", config.NewDefault())
 	m = m.withLine("line one\n")
 	m = m.withLine("line two\n")
 	require.Len(t, m.content, 2)
@@ -93,7 +102,7 @@ func TestWithLine_AccumulatesContent(t *testing.T) {
 }
 
 func TestWithLine_IsSafeToCopy(t *testing.T) {
-	m := initialModel("spec.md", "/tmp", config.NewDefault())
+	m := initialModel(testWorkflow("spec.md"), "/tmp", config.NewDefault())
 	m = m.withLine("first\n")
 	// Copy the model (simulates Bubble Tea's Update pattern) and write again
 	m2 := m

@@ -138,3 +138,11 @@ func TestBuildPrompt_NoKnowledge_StillIncludesSpecAndAgent(t *testing.T) {
 	require.Contains(t, prompt, "agent text")
 	require.Contains(t, prompt, "spec text")
 }
+
+func TestBuildPromptWithHeader_UsesCustomHeader(t *testing.T) {
+	prompt := BuildPromptWithHeader("plan content", "agent instructions", nil, "Implementation Plan")
+	require.Contains(t, prompt, "# Implementation Plan")
+	require.Contains(t, prompt, "plan content")
+	require.Contains(t, prompt, "agent instructions")
+	require.NotContains(t, prompt, "Specification to Plan")
+}

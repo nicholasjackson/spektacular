@@ -48,16 +48,24 @@ func TestLoadKnowledge_MissingDir_ReturnsEmpty(t *testing.T) {
 	require.Empty(t, result)
 }
 
-func TestWritePlanOutput_CreatesFileAndDir(t *testing.T) {
+func TestWritePlanOutput_SucceedsWhenPlanMDExists(t *testing.T) {
 	dir := t.TempDir()
 	planDir := filepath.Join(dir, ".spektacular", "plans", "my-spec")
+	require.NoError(t, os.MkdirAll(planDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(planDir, "plan.md"), []byte("# Plan"), 0644))
 
-	err := WritePlanOutput(planDir, "plan content here")
+	err := WritePlanOutput(planDir, "ignored result text")
 	require.NoError(t, err)
+}
 
-	data, err := os.ReadFile(filepath.Join(planDir, "plan.md"))
-	require.NoError(t, err)
-	require.Equal(t, "plan content here", string(data))
+func TestWritePlanOutput_ErrorWhenPlanMDMissing(t *testing.T) {
+	dir := t.TempDir()
+	planDir := filepath.Join(dir, ".spektacular", "plans", "my-spec")
+	require.NoError(t, os.MkdirAll(planDir, 0755))
+
+	err := WritePlanOutput(planDir, "result")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "agent did not produce plan.md")
 }
 
 func TestLoadAgentPrompt_ReturnsContent(t *testing.T) {

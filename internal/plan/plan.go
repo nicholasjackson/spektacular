@@ -55,14 +55,22 @@ func LoadAgentPrompt() string {
 	return string(defaults.MustReadFile("agents/planner.md"))
 }
 
-// WritePlanOutput writes the agent result text to <planDir>/plan.md.
-func WritePlanOutput(planDir, resultText string) error {
+// PreparePlanDir creates the plan directory and removes any stale plan.md so
+// that WritePlanOutput can detect whether Claude wrote one via the Write tool.
+func PreparePlanDir(planDir string) error {
 	if err := os.MkdirAll(planDir, 0755); err != nil {
 		return fmt.Errorf("creating plan directory: %w", err)
 	}
+	_ = os.Remove(filepath.Join(planDir, "plan.md"))
+	return nil
+}
+
+// WritePlanOutput verifies that the agent wrote plan.md to planDir.
+// The agent is always responsible for producing the file via its Write tool.
+func WritePlanOutput(planDir, _ string) error {
 	planFile := filepath.Join(planDir, "plan.md")
-	if err := os.WriteFile(planFile, []byte(resultText), 0644); err != nil {
-		return fmt.Errorf("writing plan.md: %w", err)
+	if _, err := os.Stat(planFile); err != nil {
+		return fmt.Errorf("agent did not produce plan.md in %s", planDir)
 	}
 	return nil
 }
@@ -89,10 +97,12 @@ func RunPlan(
 	specName := stripExt(filepath.Base(specPath))
 	planDir := filepath.Join(projectPath, ".spektacular", "plans", specName)
 
+	if err := PreparePlanDir(planDir); err != nil {
+		return "", err
+	}
+
 	if cfg.Debug.Enabled {
-		if err := os.MkdirAll(planDir, 0755); err == nil {
-			_ = os.WriteFile(filepath.Join(planDir, "prompt.md"), []byte(prompt), 0644)
-		}
+		_ = os.WriteFile(filepath.Join(planDir, "prompt.md"), []byte(prompt), 0644)
 	}
 
 	sessionID := ""

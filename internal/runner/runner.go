@@ -124,13 +124,18 @@ func DetectQuestions(text string) []Question { return detectQuestions(text) }
 
 // BuildPrompt assembles the combined prompt: agent instructions + knowledge + spec.
 func BuildPrompt(specContent, agentPrompt string, knowledge map[string]string) string {
+	return BuildPromptWithHeader(specContent, agentPrompt, knowledge, "Specification to Plan")
+}
+
+// BuildPromptWithHeader assembles the prompt with a custom content section header.
+func BuildPromptWithHeader(content, agentPrompt string, knowledge map[string]string, header string) string {
 	var b strings.Builder
 	b.WriteString(agentPrompt)
 	b.WriteString("\n\n---\n\n# Knowledge Base\n")
-	for filename, content := range knowledge {
-		fmt.Fprintf(&b, "\n## %s\n%s\n", filename, content)
+	for filename, c := range knowledge {
+		fmt.Fprintf(&b, "\n## %s\n%s\n", filename, c)
 	}
-	fmt.Fprintf(&b, "\n---\n\n# Specification to Plan\n\n%s", specContent)
+	fmt.Fprintf(&b, "\n---\n\n# %s\n\n%s", header, content)
 	return b.String()
 }
 

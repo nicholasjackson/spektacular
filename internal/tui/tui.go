@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/nicholasjackson/spektacular/internal/config"
+	"github.com/nicholasjackson/spektacular/internal/implement"
 	"github.com/nicholasjackson/spektacular/internal/plan"
 	"github.com/nicholasjackson/spektacular/internal/runner"
 )
@@ -33,6 +34,25 @@ type agentDoneMsg struct{}           // runner finished cleanly
 type agentErrMsg struct{ err error } // runner returned an error
 
 // ---------------------------------------------------------------------------
+// Workflow
+// ---------------------------------------------------------------------------
+
+// Workflow defines the agent-specific behaviour for the TUI.
+// Both plan and implement supply their own Workflow to customise
+// prompt construction and result handling.
+type Workflow struct {
+	// StatusLabel is shown in the "thinking" status bar.
+	StatusLabel string
+
+	// Start returns a tea.Cmd that builds the prompt and spawns the runner.
+	Start func(cfg config.Config, sessionID string) tea.Cmd
+
+	// OnResult is called when the agent produces a terminal result event.
+	// Returns the output directory path or an error.
+	OnResult func(resultText string) (string, error)
+}
+
+// ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
@@ -48,9 +68,14 @@ type model struct {
 	questions []runner.Question
 	answers   []string
 
+	// free-text input state (when user selects "Other")
+	otherInput bool
+	otherText  string
+
 	// state
 	themeIdx   int
 	followMode bool
+	detailMode bool
 	done       bool
 	statusText string
 
@@ -59,20 +84,20 @@ type model struct {
 	errMsg    string
 
 	// agent context (read-only after init, safe to copy)
-	specPath    string
+	workflow    Workflow
 	projectPath string
 	cfg         config.Config
 	sessionID   string
 }
 
-func initialModel(specPath, projectPath string, cfg config.Config) model {
+func initialModel(wf Workflow, projectPath string, cfg config.Config) model {
 	return model{
-		specPath:    specPath,
+		workflow:    wf,
 		projectPath: projectPath,
 		cfg:         cfg,
 		themeIdx:    0, // dracula
 		followMode:  true,
-		statusText:  "* thinking  " + filepath.Base(specPath),
+		statusText:  "* thinking  " + wf.StatusLabel,
 	}
 }
 
@@ -81,7 +106,7 @@ func initialModel(specPath, projectPath string, cfg config.Config) model {
 // ---------------------------------------------------------------------------
 
 func (m model) Init() tea.Cmd {
-	return startAgentCmd(m.specPath, m.projectPath, m.cfg, "")
+	return m.workflow.Start(m.cfg, "")
 }
 
 // startAgentCmd builds the prompt and spawns the runner, returning the first
@@ -96,9 +121,12 @@ func startAgentCmd(specPath, projectPath string, cfg config.Config, sessionID st
 		knowledge := plan.LoadKnowledge(projectPath)
 		prompt := runner.BuildPrompt(string(specContent), agentPrompt, knowledge)
 
+		planDir := filepath.Join(projectPath, ".spektacular", "plans", stripExt(filepath.Base(specPath)))
+		if err := plan.PreparePlanDir(planDir); err != nil {
+			return agentErrMsg{err: fmt.Errorf("preparing plan directory: %w", err)}
+		}
+
 		if cfg.Debug.Enabled {
-			planDir := filepath.Join(projectPath, ".spektacular", "plans", stripExt(filepath.Base(specPath)))
-			_ = os.MkdirAll(planDir, 0755)
 			_ = os.WriteFile(filepath.Join(planDir, "prompt.md"), []byte(prompt), 0644)
 		}
 
@@ -161,6 +189,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		if !m.ready {
 			m.vp = viewport.New(msg.Width, m.viewportHeight())
+			m.vp.MouseWheelEnabled = true
 			m.vp.SetContent(strings.Join(m.content, ""))
 			m.ready = true
 		} else {
@@ -168,6 +197,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vp.Height = m.viewportHeight()
 		}
 		return m, nil
+
+	case tea.MouseMsg:
+		prevOffset := m.vp.YOffset
+		var cmd tea.Cmd
+		m.vp, cmd = m.vp.Update(msg)
+		if m.vp.YOffset < prevOffset {
+			m.followMode = false
+		}
+		return m, cmd
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -195,6 +233,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.otherInput {
+		return m.handleOtherInput(msg)
+	}
+
 	switch msg.String() {
 	case "q", "Q":
 		if m.done || len(m.questions) == 0 {
@@ -216,6 +258,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "v", "V":
+		m.detailMode = !m.detailMode
+		return m, nil
+
 	case "up", "k":
 		m.followMode = false
 
@@ -224,8 +270,58 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
+	prevOffset := m.vp.YOffset
 	m.vp, cmd = m.vp.Update(msg)
+	if m.vp.YOffset < prevOffset {
+		m.followMode = false
+	}
 	return m, cmd
+}
+
+func (m model) handleOtherInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		if m.otherText == "" {
+			return m, nil
+		}
+		label := m.otherText
+		m.otherInput = false
+		m.otherText = ""
+		m.answers = append(m.answers, label)
+		m.questions = m.questions[1:]
+
+		p := m.currentPalette()
+		m = m.withLine(lipgloss.NewStyle().Foreground(p.answer).Render("> "+label) + "\n")
+
+		if len(m.questions) > 0 {
+			return m, nil
+		}
+
+		answer := strings.Join(m.answers, "\n")
+		m.answers = nil
+		m.statusText = "* thinking  " + m.workflow.StatusLabel
+		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer)
+
+	case "esc":
+		m.otherInput = false
+		m.otherText = ""
+		return m, nil
+
+	case "backspace", "ctrl+h":
+		if len(m.otherText) > 0 {
+			runes := []rune(m.otherText)
+			m.otherText = string(runes[:len(runes)-1])
+		}
+		return m, nil
+
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+
+	if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
+		m.otherText += msg.String()
+	}
+	return m, nil
 }
 
 func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
@@ -234,6 +330,14 @@ func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
 	}
 	idx := int(key[0] - '1')
 	q := m.questions[0]
+
+	// "Other" is always the option after the last agent-provided option.
+	if idx == len(q.Options) {
+		m.otherInput = true
+		m.otherText = ""
+		return m, nil
+	}
+
 	if idx < 0 || idx >= len(q.Options) {
 		return m, nil
 	}
@@ -251,7 +355,7 @@ func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
 
 	answer := strings.Join(m.answers, "\n")
 	m.answers = nil
-	m.statusText = "* thinking  " + filepath.Base(m.specPath)
+	m.statusText = "* thinking  " + m.workflow.StatusLabel
 	return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer)
 }
 
@@ -265,11 +369,22 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 		m.sessionID = id
 	}
 
-	// Tool use — update status line
+	// Tool use — log inline in detail mode, otherwise update status line.
 	for _, tool := range event.ToolUses() {
 		name, _ := tool["name"].(string)
 		input, _ := tool["input"].(map[string]any)
-		m.toolLine = toolDescription(name, input)
+		desc := toolDescription(name, input)
+		if m.detailMode {
+			p := m.currentPalette()
+			line := lipgloss.NewStyle().Foreground(p.faint).Render("  ⚙ " + desc)
+			m = m.withLine(line + "\n")
+		} else {
+			m.toolLine = desc
+		}
+	}
+	// Sync viewport height when toolLine appears (withLine not called for tool-only events).
+	if m.ready && m.toolLine != "" {
+		m.vp.Height = m.viewportHeight()
 	}
 
 	// Text content — render and append
@@ -280,11 +395,15 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 		bullet := lipgloss.NewStyle().Foreground(p.output).Render("•")
 		m = m.withLine(bulletPrefix(bullet, rendered) + "\n")
 		m.questions = append(m.questions, runner.DetectQuestions(text)...)
+		// Sync viewport height after questions are appended (withLine runs before append).
+		if m.ready {
+			m.vp.Height = m.viewportHeight()
+		}
 	}
 
 	// Result event — terminal
 	if event.IsResult() {
-		m.toolLine = ""
+		m.toolLine = "" // clear any lingering tool status
 		if event.IsError() {
 			m.errMsg = event.ResultText()
 			m.done = true
@@ -294,20 +413,19 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		specName := stripExt(filepath.Base(m.specPath))
-		planDir := filepath.Join(m.projectPath, ".spektacular", "plans", specName)
-		if err := plan.WritePlanOutput(planDir, event.ResultText()); err != nil {
+		resultDir, err := m.workflow.OnResult(event.ResultText())
+		if err != nil {
 			m.errMsg = err.Error()
 			m.done = true
 			m.statusText = "error  press q to exit"
 			return m, nil
 		}
-		m.resultDir = planDir
+		m.resultDir = resultDir
 		m.done = true
 		m.statusText = "done  press q to exit"
 		p := m.currentPalette()
 		m = m.withLine(lipgloss.NewStyle().Foreground(p.success).Render(
-			fmt.Sprintf("• plan written to %s/plan.md", planDir),
+			fmt.Sprintf("• completed  output: %s", resultDir),
 		) + "\n")
 		return m, nil
 	}
@@ -350,7 +468,11 @@ func (m model) View() string {
 	if m.followMode {
 		followHint = "f: disable follow"
 	}
-	sections = append(sections, statusStyle.Render(fmt.Sprintf("%s  %s", m.statusText, followHint)))
+	detailHint := "v: detail"
+	if m.detailMode {
+		detailHint = "v: simple"
+	}
+	sections = append(sections, statusStyle.Render(fmt.Sprintf("%s  %s  %s", m.statusText, followHint, detailHint)))
 
 	return strings.Join(sections, "\n")
 }
@@ -368,6 +490,8 @@ func (m model) renderQuestionPanel(p palette) string {
 	numStyle := lipgloss.NewStyle().Foreground(p.question).Bold(true)
 	faintStyle := lipgloss.NewStyle().Foreground(p.faint)
 
+	otherNum := fmt.Sprintf("%d", len(q.Options)+1)
+
 	var lines []string
 	lines = append(lines, headerStyle.Render(q.Header)+": "+q.Question)
 	for i, opt := range q.Options {
@@ -379,7 +503,14 @@ func (m model) renderQuestionPanel(p palette) string {
 		}
 		lines = append(lines, line)
 	}
-	lines = append(lines, faintStyle.Render("press a number to select"))
+
+	if m.otherInput {
+		lines = append(lines, fmt.Sprintf("  %s  Other: %s█", numStyle.Render(otherNum), m.otherText))
+		lines = append(lines, faintStyle.Render("type your answer and press enter  (esc to cancel)"))
+	} else {
+		lines = append(lines, fmt.Sprintf("  %s  Other", numStyle.Render(otherNum)))
+		lines = append(lines, faintStyle.Render("press a number to select"))
+	}
 
 	return borderStyle.Render(strings.Join(lines, "\n"))
 }
@@ -408,6 +539,7 @@ func bulletPrefix(bullet, rendered string) string {
 func (m model) withLine(s string) model {
 	m.content = append(m.content, s)
 	if m.ready {
+		m.vp.Height = m.viewportHeight()
 		m.vp.SetContent(strings.Join(m.content, ""))
 		if m.followMode {
 			m.vp.GotoBottom()
@@ -422,7 +554,7 @@ func (m model) viewportHeight() int {
 		reserved++
 	}
 	if len(m.questions) > 0 {
-		reserved += 3 + len(m.questions[0].Options) // border + header + options + hint
+		reserved += 4 + len(m.questions[0].Options) // border + header + options + other + hint
 	}
 	h := m.height - reserved
 	if h < 1 {
@@ -500,10 +632,10 @@ func stripExt(name string) string {
 // Entry point
 // ---------------------------------------------------------------------------
 
-// RunPlanTUI launches the interactive TUI for plan generation.
-// Returns the plan directory path on success, or empty string if the user quit early.
-func RunPlanTUI(specPath, projectPath string, cfg config.Config) (string, error) {
-	m := initialModel(specPath, projectPath, cfg)
+// RunAgentTUI is the generic TUI entry point. Callers provide a Workflow that
+// controls how the prompt is built and how the result is handled.
+func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config) (string, error) {
+	m := initialModel(wf, projectPath, cfg)
 
 	p := tea.NewProgram(
 		m,
@@ -521,4 +653,65 @@ func RunPlanTUI(specPath, projectPath string, cfg config.Config) (string, error)
 		return "", fmt.Errorf("%s", fm.errMsg)
 	}
 	return fm.resultDir, nil
+}
+
+// RunImplementTUI launches the interactive TUI for plan implementation.
+// Returns the plan directory path on success, or empty string if the user quit early.
+func RunImplementTUI(planDir, projectPath string, cfg config.Config) (string, error) {
+	wf := Workflow{
+		StatusLabel: filepath.Base(planDir),
+		Start: func(c config.Config, sessionID string) tea.Cmd {
+			return implementStartCmd(planDir, projectPath, c, sessionID)
+		},
+		OnResult: func(_ string) (string, error) {
+			return planDir, nil
+		},
+	}
+	return RunAgentTUI(wf, projectPath, cfg)
+}
+
+// implementStartCmd builds the implement prompt and spawns the runner.
+func implementStartCmd(planDir, projectPath string, cfg config.Config, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		planContent, err := implement.LoadPlanContent(planDir)
+		if err != nil {
+			return agentErrMsg{err: fmt.Errorf("loading plan: %w", err)}
+		}
+		agentPrompt := implement.LoadAgentPrompt()
+		knowledge := plan.LoadKnowledge(projectPath)
+		prompt := runner.BuildPromptWithHeader(planContent, agentPrompt, knowledge, "Implementation Plan")
+
+		if cfg.Debug.Enabled {
+			_ = os.WriteFile(filepath.Join(planDir, "implement-prompt.md"), []byte(prompt), 0644)
+		}
+
+		events, errc := runner.RunClaude(runner.RunOptions{
+			Prompt:    prompt,
+			Config:    cfg,
+			SessionID: sessionID,
+			CWD:       projectPath,
+			Command:   "implement",
+		})
+		return readNext(events, errc)
+	}
+}
+
+// RunPlanTUI launches the interactive TUI for plan generation.
+// Returns the plan directory path on success, or empty string if the user quit early.
+func RunPlanTUI(specPath, projectPath string, cfg config.Config) (string, error) {
+	wf := Workflow{
+		StatusLabel: filepath.Base(specPath),
+		Start: func(c config.Config, sessionID string) tea.Cmd {
+			return startAgentCmd(specPath, projectPath, c, sessionID)
+		},
+		OnResult: func(resultText string) (string, error) {
+			specName := stripExt(filepath.Base(specPath))
+			planDir := filepath.Join(projectPath, ".spektacular", "plans", specName)
+			if err := plan.WritePlanOutput(planDir, resultText); err != nil {
+				return "", err
+			}
+			return planDir, nil
+		},
+	}
+	return RunAgentTUI(wf, projectPath, cfg)
 }
