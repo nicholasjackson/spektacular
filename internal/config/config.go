@@ -100,7 +100,7 @@ func NewDefault() Config {
 		Agent: AgentConfig{
 			Command:                  "claude",
 			Args:                     []string{"--output-format", "stream-json", "--verbose"},
-			AllowedTools:             []string{"Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
+			AllowedTools:             []string{"Task", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
 			DangerouslySkipPermissions: false,
 		},
 		Debug: DebugConfig{

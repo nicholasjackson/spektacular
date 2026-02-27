@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/defaults"
-	"github.com/nicholasjackson/spektacular/internal/plan"
-	"github.com/nicholasjackson/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/defaults"
+	"github.com/jumppad-labs/spektacular/internal/runner"
 )
 
 // LoadAgentPrompt returns the embedded executor agent prompt.
@@ -80,8 +79,7 @@ func RunImplement(
 	}
 
 	agentPrompt := LoadAgentPrompt()
-	knowledge := plan.LoadKnowledge(projectPath)
-	prompt := runner.BuildPromptWithHeader(planContent, agentPrompt, knowledge, "Implementation Plan")
+	prompt := runner.BuildPromptWithHeader(planContent, "Implementation Plan")
 
 	if cfg.Debug.Enabled {
 		_ = os.WriteFile(filepath.Join(planDir, "implement-prompt.md"), []byte(prompt), 0644)
@@ -95,11 +93,12 @@ func RunImplement(
 		var finalResult string
 
 		events, errc := runner.RunClaude(runner.RunOptions{
-			Prompt:    currentPrompt,
-			Config:    cfg,
-			SessionID: sessionID,
-			CWD:       projectPath,
-			Command:   "implement",
+			Prompt:       currentPrompt,
+			SystemPrompt: agentPrompt,
+			Config:       cfg,
+			SessionID:    sessionID,
+			CWD:          projectPath,
+			Command:      "implement",
 		})
 
 		for event := range events {

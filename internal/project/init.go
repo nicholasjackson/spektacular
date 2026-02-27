@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/defaults"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/defaults"
 )
 
 // Init creates the .spektacular directory structure in projectPath.

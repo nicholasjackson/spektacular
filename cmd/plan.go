@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/plan"
-	"github.com/nicholasjackson/spektacular/internal/runner"
-	"github.com/nicholasjackson/spektacular/internal/tui"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/plan"
+	"github.com/jumppad-labs/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

@@ -122,27 +122,15 @@ func TestDetectQuestions_MultilineMarker(t *testing.T) {
 // buildPrompt tests
 // ---------------------------------------------------------------------------
 
-func TestBuildPrompt_ContainsAllParts(t *testing.T) {
-	prompt := BuildPrompt("my spec", "agent instructions", map[string]string{
-		"arch.md": "architecture content",
-	})
-	require.Contains(t, prompt, "agent instructions")
-	require.Contains(t, prompt, "Knowledge Base")
-	require.Contains(t, prompt, "arch.md")
-	require.Contains(t, prompt, "architecture content")
+func TestBuildPrompt_ContainsSpecAndKnowledgeHint(t *testing.T) {
+	prompt := BuildPrompt("my spec")
 	require.Contains(t, prompt, "my spec")
-}
-
-func TestBuildPrompt_NoKnowledge_StillIncludesSpecAndAgent(t *testing.T) {
-	prompt := BuildPrompt("spec text", "agent text", nil)
-	require.Contains(t, prompt, "agent text")
-	require.Contains(t, prompt, "spec text")
+	require.Contains(t, prompt, ".spektacular/knowledge/")
 }
 
 func TestBuildPromptWithHeader_UsesCustomHeader(t *testing.T) {
-	prompt := BuildPromptWithHeader("plan content", "agent instructions", nil, "Implementation Plan")
+	prompt := BuildPromptWithHeader("plan content", "Implementation Plan")
 	require.Contains(t, prompt, "# Implementation Plan")
 	require.Contains(t, prompt, "plan content")
-	require.Contains(t, prompt, "agent instructions")
 	require.NotContains(t, prompt, "Specification to Plan")
 }

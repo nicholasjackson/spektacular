@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nicholasjackson/spektacular/internal/defaults"
+	"github.com/jumppad-labs/spektacular/internal/defaults"
 )
 
 // Create writes a new spec file to .spektacular/specs/<name>.md inside projectPath.

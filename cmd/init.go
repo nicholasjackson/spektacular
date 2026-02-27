@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nicholasjackson/spektacular/internal/project"
+	"github.com/jumppad-labs/spektacular/internal/project"
 	"github.com/spf13/cobra"
 )
 

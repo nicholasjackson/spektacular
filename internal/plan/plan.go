@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/defaults"
-	"github.com/nicholasjackson/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/defaults"
+	"github.com/jumppad-labs/spektacular/internal/runner"
 )
 
 // LoadKnowledge returns all markdown files from .spektacular/knowledge/, keyed by
@@ -91,8 +91,7 @@ func RunPlan(
 	}
 
 	agentPrompt := LoadAgentPrompt()
-	knowledge := LoadKnowledge(projectPath)
-	prompt := runner.BuildPrompt(string(specContent), agentPrompt, knowledge)
+	prompt := runner.BuildPrompt(string(specContent))
 
 	specName := stripExt(filepath.Base(specPath))
 	planDir := filepath.Join(projectPath, ".spektacular", "plans", specName)
@@ -113,11 +112,12 @@ func RunPlan(
 		var finalResult string
 
 		events, errc := runner.RunClaude(runner.RunOptions{
-			Prompt:    currentPrompt,
-			Config:    cfg,
-			SessionID: sessionID,
-			CWD:       projectPath,
-			Command:   "plan",
+			Prompt:       currentPrompt,
+			SystemPrompt: agentPrompt,
+			Config:       cfg,
+			SessionID:    sessionID,
+			CWD:          projectPath,
+			Command:      "plan",
 		})
 
 		for event := range events {

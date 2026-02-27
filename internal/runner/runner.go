@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/config"
 )
 
 var questionPattern = regexp.MustCompile(`<!--QUESTION:([\s\S]*?)-->`)
@@ -122,30 +122,28 @@ func detectQuestions(text string) []Question {
 // DetectQuestions is the exported wrapper used by other packages.
 func DetectQuestions(text string) []Question { return detectQuestions(text) }
 
-// BuildPrompt assembles the combined prompt: agent instructions + knowledge + spec.
-func BuildPrompt(specContent, agentPrompt string, knowledge map[string]string) string {
-	return BuildPromptWithHeader(specContent, agentPrompt, knowledge, "Specification to Plan")
+// BuildPrompt assembles the user prompt: knowledge hint + spec content.
+// Agent specialization belongs in RunOptions.SystemPrompt, not here.
+func BuildPrompt(specContent string) string {
+	return BuildPromptWithHeader(specContent, "Specification to Plan")
 }
 
-// BuildPromptWithHeader assembles the prompt with a custom content section header.
-func BuildPromptWithHeader(content, agentPrompt string, knowledge map[string]string, header string) string {
+// BuildPromptWithHeader assembles the user prompt with a custom content section header.
+func BuildPromptWithHeader(content string, header string) string {
 	var b strings.Builder
-	b.WriteString(agentPrompt)
-	b.WriteString("\n\n---\n\n# Knowledge Base\n")
-	for filename, c := range knowledge {
-		fmt.Fprintf(&b, "\n## %s\n%s\n", filename, c)
-	}
-	fmt.Fprintf(&b, "\n---\n\n# %s\n\n%s", header, content)
+	b.WriteString("Additional project knowledge, architectural context, and past learnings can be found in `.spektacular/knowledge/`. Use your available tools to explore this directory as needed.\n\n")
+	fmt.Fprintf(&b, "---\n\n# %s\n\n%s", header, content)
 	return b.String()
 }
 
 // RunOptions holds parameters for RunClaude.
 type RunOptions struct {
-	Prompt    string
-	Config    config.Config
-	SessionID string
-	CWD       string
-	Command   string // used only for debug log filename
+	Prompt       string
+	SystemPrompt string // passed as --system-prompt; use for agent specialization
+	Config       config.Config
+	SessionID    string
+	CWD          string
+	Command      string // used only for debug log filename
 }
 
 // RunClaude spawns the claude subprocess and returns a channel of events and an error channel.
@@ -168,6 +166,9 @@ func RunClaude(opts RunOptions) (<-chan ClaudeEvent, <-chan error) {
 func runClaude(opts RunOptions, events chan<- ClaudeEvent) error {
 	cfg := opts.Config
 	cmd := []string{cfg.Agent.Command, "-p", opts.Prompt}
+	if opts.SystemPrompt != "" {
+		cmd = append(cmd, "--system-prompt", opts.SystemPrompt)
+	}
 	cmd = append(cmd, cfg.Agent.Args...)
 
 	if len(cfg.Agent.AllowedTools) > 0 {

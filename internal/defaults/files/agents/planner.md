@@ -98,7 +98,7 @@ Launch research sub-agents using structured prompts:
 
 ## Phase 1: [Phase Name]
 ### Changes Required
-- **File**: `path/to/file.py:lines`
+- **File**: `path/to/file:lines`
   - **Current**: [code snippet]
   - **Proposed**: [code snippet with detailed comments]
   - **Rationale**: [why this change]
@@ -183,10 +183,10 @@ Launch research sub-agents using structured prompts:
 [1-2 sentence summary of what's being implemented]
 
 ## Key Files & Locations
-- **Primary Implementation**: `path/to/main.py`
-- **Configuration**: `path/to/config.yaml`
-- **Tests**: `tests/unit/test_feature.py`
-- **Integration**: `path/to/integration.py`
+- **Primary Implementation**: `path/to/source`
+- **Configuration**: `path/to/config`
+- **Tests**: `path/to/tests`
+- **Integration**: `path/to/integration`
 
 ## Dependencies
 - **Code Dependencies**: [internal modules/packages]

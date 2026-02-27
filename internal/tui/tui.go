@@ -11,10 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/implement"
-	"github.com/nicholasjackson/spektacular/internal/plan"
-	"github.com/nicholasjackson/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/implement"
+	"github.com/jumppad-labs/spektacular/internal/plan"
+	"github.com/jumppad-labs/spektacular/internal/runner"
 )
 
 // ---------------------------------------------------------------------------
@@ -118,8 +118,7 @@ func startAgentCmd(specPath, projectPath string, cfg config.Config, sessionID st
 			return agentErrMsg{err: fmt.Errorf("reading spec: %w", err)}
 		}
 		agentPrompt := plan.LoadAgentPrompt()
-		knowledge := plan.LoadKnowledge(projectPath)
-		prompt := runner.BuildPrompt(string(specContent), agentPrompt, knowledge)
+		prompt := runner.BuildPrompt(string(specContent))
 
 		planDir := filepath.Join(projectPath, ".spektacular", "plans", stripExt(filepath.Base(specPath)))
 		if err := plan.PreparePlanDir(planDir); err != nil {
@@ -131,7 +130,8 @@ func startAgentCmd(specPath, projectPath string, cfg config.Config, sessionID st
 		}
 
 		events, errc := runner.RunClaude(runner.RunOptions{
-			Prompt:    prompt,
+			Prompt:       prompt,
+			SystemPrompt: agentPrompt,
 			Config:    cfg,
 			SessionID: sessionID,
 			CWD:       projectPath,
@@ -678,19 +678,19 @@ func implementStartCmd(planDir, projectPath string, cfg config.Config, sessionID
 			return agentErrMsg{err: fmt.Errorf("loading plan: %w", err)}
 		}
 		agentPrompt := implement.LoadAgentPrompt()
-		knowledge := plan.LoadKnowledge(projectPath)
-		prompt := runner.BuildPromptWithHeader(planContent, agentPrompt, knowledge, "Implementation Plan")
+		prompt := runner.BuildPromptWithHeader(planContent, "Implementation Plan")
 
 		if cfg.Debug.Enabled {
 			_ = os.WriteFile(filepath.Join(planDir, "implement-prompt.md"), []byte(prompt), 0644)
 		}
 
 		events, errc := runner.RunClaude(runner.RunOptions{
-			Prompt:    prompt,
-			Config:    cfg,
-			SessionID: sessionID,
-			CWD:       projectPath,
-			Command:   "implement",
+			Prompt:       prompt,
+			SystemPrompt: agentPrompt,
+			Config:       cfg,
+			SessionID:    sessionID,
+			CWD:          projectPath,
+			Command:      "implement",
 		})
 		return readNext(events, errc)
 	}

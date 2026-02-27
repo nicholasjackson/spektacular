@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nicholasjackson/spektacular/internal/config"
-	"github.com/nicholasjackson/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/runner"
 	"github.com/stretchr/testify/require"
 )
 
