@@ -73,3 +73,8 @@ func toTitle(name string) string {
 	}
 	return strings.Join(words, " ")
 }
+
+// LoadInteractiveAgentPrompt returns the spec creator agent system prompt
+func LoadInteractiveAgentPrompt() string {
+	return string(defaults.MustReadFile("agents/spec-creator.md"))
+}

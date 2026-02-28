@@ -9,6 +9,7 @@
   Avoid implementation details — this should be readable by any stakeholder.
 -->
 ## Overview
+{description}
 
 
 <!--

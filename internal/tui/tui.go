@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -15,6 +16,7 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/implement"
 	"github.com/jumppad-labs/spektacular/internal/plan"
 	"github.com/jumppad-labs/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/spec"
 )
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,10 @@ type model struct {
 	otherInput bool
 	otherText  string
 
+	// Enhanced text input state
+	textareaActive bool          // True when textarea has focus
+	textarea       textarea.Model // Multi-line text input component
+
 	// state
 	themeIdx   int
 	followMode bool
@@ -88,6 +94,7 @@ type model struct {
 	projectPath string
 	cfg         config.Config
 	sessionID   string
+	command     string // command type: "plan", "implement", or "interactive"
 }
 
 func initialModel(wf Workflow, projectPath string, cfg config.Config) model {
@@ -99,6 +106,23 @@ func initialModel(wf Workflow, projectPath string, cfg config.Config) model {
 		followMode:  true,
 		statusText:  "* thinking  " + wf.StatusLabel,
 	}
+}
+
+// initTextarea creates and configures a new textarea
+func (m *model) initTextarea(placeholder string) {
+	ta := textarea.New()
+	ta.Placeholder = placeholder
+	ta.Focus()
+	ta.CharLimit = 10000 // Reasonable limit for spec sections
+	ta.SetWidth(m.width - 4)  // Leave room for borders
+	ta.SetHeight(10)          // Default height, adjustable
+
+	// Style
+	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	ta.ShowLineNumbers = false
+
+	m.textarea = ta
+	m.textareaActive = true
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +173,7 @@ func startAgentCmd(specPath, projectPath string, cfg config.Config, sessionID st
 }
 
 // resumeAgentCmd starts a new runner turn with the user's answer.
-func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer string) tea.Cmd {
+func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer, command string) tea.Cmd {
 	return func() tea.Msg {
 		r, err := runner.NewRunner(cfg)
 		if err != nil {
@@ -161,7 +185,7 @@ func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer string) te
 			Config:    cfg,
 			SessionID: sessionID,
 			CWD:       projectPath,
-			Command:   "plan",
+			Command:   command,
 		})
 		return readNext(events, errc)
 	}
@@ -245,6 +269,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Textarea has priority when active
+	if m.textareaActive {
+		return m.handleTextareaInput(msg)
+	}
+
 	if m.otherInput {
 		return m.handleOtherInput(msg)
 	}
@@ -312,7 +341,7 @@ func (m model) handleOtherInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		answer := strings.Join(m.answers, "\n")
 		m.answers = nil
 		m.statusText = "* thinking  " + m.workflow.StatusLabel
-		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer)
+		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.command)
 
 	case "esc":
 		m.otherInput = false
@@ -336,39 +365,81 @@ func (m model) handleOtherInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleTextareaInput processes keys when textarea is active
+func (m model) handleTextareaInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "ctrl+d", "ctrl+s":
+		// Submit multi-line input (Ctrl+D or Ctrl+S)
+		answer := m.textarea.Value()
+		if answer == "" {
+			return m, nil
+		}
+
+		// Render the submitted answer
+		p := m.currentPalette()
+		// For multi-line answers, show a preview of the first line
+		firstLine := strings.Split(answer, "\n")[0]
+		if len(firstLine) > 60 {
+			firstLine = firstLine[:60] + "..."
+		}
+		lineCount := len(strings.Split(answer, "\n"))
+		previewText := fmt.Sprintf("> %s (%d lines)", firstLine, lineCount)
+		m = m.withLine(lipgloss.NewStyle().Foreground(p.answer).Render(previewText) + "\n")
+
+		// Deactivate textarea
+		m.textareaActive = false
+		m.textarea.Reset()
+
+		// Add answer and proceed
+		m.answers = append(m.answers, answer)
+		m.questions = m.questions[1:]
+
+		// If more questions remain, wait for them to be displayed
+		if len(m.questions) > 0 {
+			return m, nil
+		}
+
+		// All questions answered, resume agent
+		fullAnswer := joinAnswers(m.answers)
+		m.answers = nil
+		m.statusText = "* thinking  " + m.workflow.StatusLabel
+		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, fullAnswer, m.command)
+
+	case "esc":
+		// Cancel input
+		m.textareaActive = false
+		m.textarea.Reset()
+		return m, nil
+
+	case "ctrl+c":
+		// Force quit
+		return m, tea.Quit
+
+	default:
+		// Delegate all other keys to textarea (typing, navigation, etc.)
+		m.textarea, cmd = m.textarea.Update(msg)
+	}
+
+	return m, cmd
+}
+
+// joinAnswers combines multiple answers with proper formatting
+func joinAnswers(answers []string) string {
+	var result strings.Builder
+	for i, answer := range answers {
+		if i > 0 {
+			result.WriteString("\n\n---\n\n")
+		}
+		result.WriteString(answer)
+	}
+	return result.String()
+}
+
 func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
-	if len(m.questions) == 0 {
-		return m, nil
-	}
-	idx := int(key[0] - '1')
-	q := m.questions[0]
-
-	// "Other" is always the option after the last agent-provided option.
-	if idx == len(q.Options) {
-		m.otherInput = true
-		m.otherText = ""
-		return m, nil
-	}
-
-	if idx < 0 || idx >= len(q.Options) {
-		return m, nil
-	}
-
-	label, _ := q.Options[idx]["label"].(string)
-	m.answers = append(m.answers, label)
-	m.questions = m.questions[1:]
-
-	p := m.currentPalette()
-	m = m.withLine(lipgloss.NewStyle().Foreground(p.answer).Render("> "+label) + "\n")
-
-	if len(m.questions) > 0 {
-		return m, nil
-	}
-
-	answer := strings.Join(m.answers, "\n")
-	m.answers = nil
-	m.statusText = "* thinking  " + m.workflow.StatusLabel
-	return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer)
+	// Numbers are disabled when textarea is active - user should type their answer
+	return m, nil
 }
 
 // handleAgentEvent processes one event from the runner.
@@ -406,7 +477,17 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 		p := m.currentPalette()
 		bullet := lipgloss.NewStyle().Foreground(p.output).Render("•")
 		m = m.withLine(bulletPrefix(bullet, rendered) + "\n")
-		m.questions = append(m.questions, runner.DetectQuestions(text)...)
+
+		newQuestions := runner.DetectQuestions(text)
+		m.questions = append(m.questions, newQuestions...)
+
+		// If we just got a new question and textarea isn't already active, activate it
+		if len(newQuestions) > 0 && !m.textareaActive {
+			q := newQuestions[0]
+			placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
+			m.initTextarea(placeholder)
+		}
+
 		// Sync viewport height after questions are appended (withLine runs before append).
 		if m.ready {
 			m.vp.Height = m.viewportHeight()
@@ -499,30 +580,24 @@ func (m model) renderQuestionPanel(p palette) string {
 		Padding(0, 1)
 
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	numStyle := lipgloss.NewStyle().Foreground(p.question).Bold(true)
 	faintStyle := lipgloss.NewStyle().Foreground(p.faint)
-
-	otherNum := fmt.Sprintf("%d", len(q.Options)+1)
 
 	var lines []string
 	lines = append(lines, headerStyle.Render(q.Header)+": "+q.Question)
-	for i, opt := range q.Options {
-		label, _ := opt["label"].(string)
-		desc, _ := opt["description"].(string)
-		line := fmt.Sprintf("  %s  %s", numStyle.Render(fmt.Sprintf("%d", i+1)), label)
-		if desc != "" {
-			line += "  " + faintStyle.Render("— "+desc)
-		}
-		lines = append(lines, line)
+
+	// If textarea is active, show it instead of options
+	if m.textareaActive {
+		lines = append(lines, "")
+		lines = append(lines, m.textarea.View())
+		lines = append(lines, "")
+		lines = append(lines, faintStyle.Render("ctrl+d or ctrl+s to submit  •  esc to cancel  •  supports markdown"))
+		return borderStyle.Render(strings.Join(lines, "\n"))
 	}
 
-	if m.otherInput {
-		lines = append(lines, fmt.Sprintf("  %s  Other: %s█", numStyle.Render(otherNum), m.otherText))
-		lines = append(lines, faintStyle.Render("type your answer and press enter  (esc to cancel)"))
-	} else {
-		lines = append(lines, fmt.Sprintf("  %s  Other", numStyle.Render(otherNum)))
-		lines = append(lines, faintStyle.Render("press a number to select"))
-	}
+	// Textarea should be active (initialized when question detected)
+	// If not showing yet, display loading message
+	lines = append(lines, "")
+	lines = append(lines, faintStyle.Render("Loading input..."))
 
 	return borderStyle.Render(strings.Join(lines, "\n"))
 }
@@ -646,8 +721,9 @@ func stripExt(name string) string {
 
 // RunAgentTUI is the generic TUI entry point. Callers provide a Workflow that
 // controls how the prompt is built and how the result is handled.
-func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config) (string, error) {
+func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config, command string) (string, error) {
 	m := initialModel(wf, projectPath, cfg)
+	m.command = command
 
 	p := tea.NewProgram(
 		m,
@@ -679,7 +755,7 @@ func RunImplementTUI(planDir, projectPath string, cfg config.Config) (string, er
 			return planDir, nil
 		},
 	}
-	return RunAgentTUI(wf, projectPath, cfg)
+	return RunAgentTUI(wf, projectPath, cfg, "implement")
 }
 
 // implementStartCmd builds the implement prompt and spawns the runner.
@@ -732,5 +808,55 @@ func RunPlanTUI(specPath, projectPath string, cfg config.Config) (string, error)
 			return planDir, nil
 		},
 	}
-	return RunAgentTUI(wf, projectPath, cfg)
+	return RunAgentTUI(wf, projectPath, cfg, "plan")
+}
+
+// RunSpecCreatorTUI launches the interactive spec creation TUI
+func RunSpecCreatorTUI(name, projectPath string, cfg config.Config) (string, error) {
+	workflow := Workflow{
+		StatusLabel: "Creating specification",
+		Start: func(c config.Config, sessionID string) tea.Cmd {
+			return specCreatorStartCmd(name, projectPath, c, sessionID)
+		},
+		OnResult: func(resultText string) (string, error) {
+			// Agent should have written the spec via Write tool
+			// The result text is just confirmation
+			return "", nil
+		},
+	}
+
+	// Use generic RunAgentTUI with spec creator workflow
+	return RunAgentTUI(workflow, projectPath, cfg, "interactive")
+}
+
+// specCreatorStartCmd builds the initial prompt and spawns the runner
+func specCreatorStartCmd(name, projectPath string, cfg config.Config, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		// Get agent system prompt
+		agentPrompt := spec.LoadInteractiveAgentPrompt()
+
+		// Build initial prompt with spec name context
+		initialPrompt := runner.BuildPromptWithHeader(
+			fmt.Sprintf("Create a new specification file named '%s.md'. Guide the user through filling out each section interactively.", name),
+			"Create Specification",
+		)
+
+		// Create runner
+		r, err := runner.NewRunner(cfg)
+		if err != nil {
+			return agentErrMsg{err: fmt.Errorf("creating runner: %w", err)}
+		}
+
+		// Run agent
+		events, errc := r.Run(runner.RunOptions{
+			Prompt:       initialPrompt,
+			SystemPrompt: agentPrompt,
+			Config:       cfg,
+			SessionID:    sessionID,
+			CWD:          projectPath,
+			Command:      "interactive",
+		})
+
+		return readNext(events, errc)
+	}
 }

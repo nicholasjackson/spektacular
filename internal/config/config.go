@@ -55,10 +55,11 @@ type DebugConfig struct {
 
 // AgentConfig holds configuration for the coding agent subprocess.
 type AgentConfig struct {
-	Command                  string   `yaml:"command"`
-	Args                     []string `yaml:"args"`
-	AllowedTools             []string `yaml:"allowed_tools"`
-	DangerouslySkipPermissions bool  `yaml:"dangerously_skip_permissions"`
+	Command                    string   `yaml:"command"`
+	Args                       []string `yaml:"args"`
+	AllowedTools               []string `yaml:"allowed_tools"`
+	DisallowedTools            []string `yaml:"disallowed_tools"`
+	DangerouslySkipPermissions bool     `yaml:"dangerously_skip_permissions"`
 }
 
 // Config is the top-level Spektacular configuration.
@@ -98,9 +99,10 @@ func NewDefault() Config {
 			IncludeMetadata: true,
 		},
 		Agent: AgentConfig{
-			Command:                  "claude",
-			Args:                     []string{"--output-format", "stream-json", "--verbose"},
-			AllowedTools:             []string{"Task", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
+			Command:                    "claude",
+			Args:                       []string{"--output-format", "stream-json", "--verbose"},
+			AllowedTools:               []string{"Task", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
+			DisallowedTools:            []string{"AskUserQuestion"},
 			DangerouslySkipPermissions: false,
 		},
 		Debug: DebugConfig{

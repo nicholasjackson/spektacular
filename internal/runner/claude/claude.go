@@ -53,6 +53,9 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	if len(cfg.Agent.AllowedTools) > 0 {
 		cmd = append(cmd, "--allowedTools", strings.Join(cfg.Agent.AllowedTools, ","))
 	}
+	if len(cfg.Agent.DisallowedTools) > 0 {
+		cmd = append(cmd, "--disallowedTools", strings.Join(cfg.Agent.DisallowedTools, ","))
+	}
 	if cfg.Agent.DangerouslySkipPermissions {
 		cmd = append(cmd, "--dangerously-skip-permissions")
 	}
@@ -83,7 +86,7 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 
 	var debugLog *os.File
 	if cfg.Debug.Enabled {
-		debugLog = openDebugLog(cfg, opts.Command, cwd)
+		debugLog = openDebugLog(cfg, opts.Command, opts.SessionID, cwd)
 		if debugLog != nil {
 			defer debugLog.Close()
 		}
@@ -113,16 +116,28 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	return nil
 }
 
-func openDebugLog(cfg config.Config, command, cwd string) *os.File {
+func openDebugLog(cfg config.Config, command, sessionID, cwd string) *os.File {
 	logDir := filepath.Join(cwd, cfg.Debug.LogDir)
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil
 	}
-	ts := time.Now().Format("2006-01-02_150405")
-	filename := fmt.Sprintf("%s_%s_%s.log", ts, cfg.Agent.Command, command)
-	f, err := os.Create(filepath.Join(logDir, filename))
+
+	// Use date-based log filename so all sessions on same day go to same file
+	// This keeps related conversations together and avoids creating many tiny files
+	date := time.Now().Format("2006-01-02")
+	filename := fmt.Sprintf("%s_%s_%s.log", date, cfg.Agent.Command, command)
+	logPath := filepath.Join(logDir, filename)
+
+	// Open in append mode if file exists, create if new
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil
 	}
+
+	// Add session separator if this is a new session (no sessionID yet)
+	if sessionID == "" {
+		fmt.Fprintf(f, "\n\n========== NEW SESSION: %s ==========\n", time.Now().Format("15:04:05"))
+	}
+
 	return f
 }
