@@ -89,10 +89,21 @@ func (e Event) ToolUses() []map[string]any {
 	return tools
 }
 
+// QuestionType controls how the TUI renders a question.
+// "text" shows a free-text textarea. "choice" shows numbered options with an automatic "Other" entry.
+// Defaults to "text" when not specified or when no options are provided.
+type QuestionType string
+
+const (
+	QuestionTypeText   QuestionType = "text"
+	QuestionTypeChoice QuestionType = "choice"
+)
+
 // Question is a structured question detected in agent output.
 type Question struct {
 	Question string
 	Header   string
+	Type     QuestionType
 	Options  []map[string]any
 }
 
@@ -104,6 +115,7 @@ func detectQuestions(text string) []Question {
 			Questions []struct {
 				Question string           `json:"question"`
 				Header   string           `json:"header"`
+				Type     string           `json:"type"`
 				Options  []map[string]any `json:"options"`
 			} `json:"questions"`
 		}
@@ -111,9 +123,14 @@ func detectQuestions(text string) []Question {
 			continue
 		}
 		for _, q := range payload.Questions {
+			qt := QuestionTypeText
+			if q.Type == string(QuestionTypeChoice) && len(q.Options) > 0 {
+				qt = QuestionTypeChoice
+			}
 			questions = append(questions, Question{
 				Question: q.Question,
 				Header:   q.Header,
+				Type:     qt,
 				Options:  q.Options,
 			})
 		}

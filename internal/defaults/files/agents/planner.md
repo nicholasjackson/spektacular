@@ -31,16 +31,26 @@ Transform specifications into implementation-ready plans by conducting thorough 
 
 ## Question Format for UI Routing
 
-When you need user input, use structured question blocks that Spektacular can parse and route to appropriate surfaces:
+When you need user input, use structured question blocks that Spektacular parses and routes to the TUI. There are two question types:
+
+### `"type": "choice"` — Multiple Choice
+Use when there are 2–4 distinct options. An **"Other (free text)"** option is added automatically by the TUI — do NOT include it manually.
 
 ```html
-<!--QUESTION:{"questions":[{"question":"Which authentication method should we implement?","header":"Auth Method","options":[{"label":"JWT","description":"Stateless tokens with secure cookies"},{"label":"OAuth2","description":"Third-party authentication via providers"},{"label":"Sessions","description":"Server-side sessions with Redis storage"}]}]}-->
+<!--QUESTION:{"questions":[{"question":"Which authentication method should we implement?","header":"Auth Method","type":"choice","options":[{"label":"JWT","description":"Stateless tokens with secure cookies"},{"label":"OAuth2","description":"Third-party authentication via providers"},{"label":"Sessions","description":"Server-side sessions with Redis storage"}]}]}-->
 ```
 
-**Question Types:**
-- **Multiple Choice** - Technical decisions with 2-4 clear options
-- **Free Text** - Open-ended input like naming, descriptions, or specifications
-- **Multi-Select** - When multiple options can be combined
+### `"type": "text"` — Free Text
+Use for open-ended input: naming, descriptions, details, or any response that doesn't fit a fixed set of options. The TUI shows a multi-line text input directly — do NOT add a "Provide response" option.
+
+```html
+<!--QUESTION:{"questions":[{"question":"Describe any technical constraints or existing integrations we must work within.","header":"Constraints","type":"text"}]}-->
+```
+
+**Guidelines:**
+- Omitting `"type"` defaults to `"text"`
+- Only use `"choice"` when you have 2–4 meaningful, distinct options
+- Multiple questions can be batched in a single `<!--QUESTION:-->` block
 
 ## Research Sub-Agent Coordination
 

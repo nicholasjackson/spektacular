@@ -306,6 +306,15 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		m.followMode = false
 
+	case "enter":
+		// Re-activate textarea for text questions if it was dismissed
+		if len(m.questions) > 0 && m.questions[0].Type == runner.QuestionTypeText && !m.textareaActive {
+			q := m.questions[0]
+			placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
+			m.initTextarea(placeholder)
+			return m, nil
+		}
+
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		return m.handleNumberKey(msg.String())
 	}
@@ -396,8 +405,13 @@ func (m model) handleTextareaInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.answers = append(m.answers, answer)
 		m.questions = m.questions[1:]
 
-		// If more questions remain, wait for them to be displayed
+		// If more questions remain, check if next needs textarea
 		if len(m.questions) > 0 {
+			nextQ := m.questions[0]
+			if nextQ.Type == runner.QuestionTypeText {
+				placeholder := fmt.Sprintf("Enter your response for %s...", nextQ.Header)
+				m.initTextarea(placeholder)
+			}
 			return m, nil
 		}
 
@@ -438,8 +452,53 @@ func joinAnswers(answers []string) string {
 }
 
 func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
-	// Numbers are disabled when textarea is active - user should type their answer
-	return m, nil
+	if len(m.questions) == 0 {
+		return m, nil
+	}
+	q := m.questions[0]
+	if q.Type != runner.QuestionTypeChoice {
+		return m, nil
+	}
+
+	n := int(key[0] - '0')
+	if n < 1 {
+		return m, nil
+	}
+
+	otherIdx := len(q.Options) + 1
+	if n == otherIdx {
+		// "Other" selected — open textarea
+		placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
+		m.initTextarea(placeholder)
+		return m, nil
+	}
+
+	if n > len(q.Options) {
+		return m, nil
+	}
+
+	opt := q.Options[n-1]
+	label, _ := opt["label"].(string)
+
+	p := m.currentPalette()
+	m = m.withLine(lipgloss.NewStyle().Foreground(p.answer).Render(fmt.Sprintf("> %s", label)) + "\n")
+
+	m.answers = append(m.answers, label)
+	m.questions = m.questions[1:]
+
+	if len(m.questions) > 0 {
+		nextQ := m.questions[0]
+		if nextQ.Type == runner.QuestionTypeText {
+			placeholder := fmt.Sprintf("Enter your response for %s...", nextQ.Header)
+			m.initTextarea(placeholder)
+		}
+		return m, nil
+	}
+
+	answer := joinAnswers(m.answers)
+	m.answers = nil
+	m.statusText = "* thinking  " + m.workflow.StatusLabel
+	return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.command)
 }
 
 // handleAgentEvent processes one event from the runner.
@@ -481,11 +540,13 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 		newQuestions := runner.DetectQuestions(text)
 		m.questions = append(m.questions, newQuestions...)
 
-		// If we just got a new question and textarea isn't already active, activate it
+		// For text-type questions, auto-activate textarea; choice type shows options
 		if len(newQuestions) > 0 && !m.textareaActive {
 			q := newQuestions[0]
-			placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
-			m.initTextarea(placeholder)
+			if q.Type == runner.QuestionTypeText {
+				placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
+				m.initTextarea(placeholder)
+			}
 		}
 
 		// Sync viewport height after questions are appended (withLine runs before append).
@@ -581,11 +642,19 @@ func (m model) renderQuestionPanel(p palette) string {
 
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	faintStyle := lipgloss.NewStyle().Foreground(p.faint)
+	optStyle := lipgloss.NewStyle().Foreground(p.answer)
+
+	// Wrap question text to available width
+	wrapWidth := m.width - 6 // account for border + padding
+	if wrapWidth < 20 {
+		wrapWidth = 20
+	}
 
 	var lines []string
-	lines = append(lines, headerStyle.Render(q.Header)+": "+q.Question)
+	lines = append(lines, headerStyle.Render(q.Header))
+	lines = append(lines, wordWrap(q.Question, wrapWidth))
 
-	// If textarea is active, show it instead of options
+	// Textarea is active — shown for text questions and "Other" in choice questions
 	if m.textareaActive {
 		lines = append(lines, "")
 		lines = append(lines, m.textarea.View())
@@ -594,11 +663,28 @@ func (m model) renderQuestionPanel(p palette) string {
 		return borderStyle.Render(strings.Join(lines, "\n"))
 	}
 
-	// Textarea should be active (initialized when question detected)
-	// If not showing yet, display loading message
-	lines = append(lines, "")
-	lines = append(lines, faintStyle.Render("Loading input..."))
+	if q.Type == runner.QuestionTypeChoice {
+		// Render numbered options + automatic "Other"
+		lines = append(lines, "")
+		for i, opt := range q.Options {
+			label, _ := opt["label"].(string)
+			desc, _ := opt["description"].(string)
+			line := optStyle.Render(fmt.Sprintf("  %d. %s", i+1, label))
+			if desc != "" {
+				line += faintStyle.Render(" — "+desc)
+			}
+			lines = append(lines, line)
+		}
+		otherIdx := len(q.Options) + 1
+		lines = append(lines, faintStyle.Render(fmt.Sprintf("  %d. Other (free text)", otherIdx)))
+		lines = append(lines, "")
+		lines = append(lines, faintStyle.Render("press number to select"))
+		return borderStyle.Render(strings.Join(lines, "\n"))
+	}
 
+	// Text type — textarea was deactivated (esc); show re-activate hint
+	lines = append(lines, "")
+	lines = append(lines, faintStyle.Render("press enter to start typing"))
 	return borderStyle.Render(strings.Join(lines, "\n"))
 }
 
@@ -641,7 +727,17 @@ func (m model) viewportHeight() int {
 		reserved++
 	}
 	if len(m.questions) > 0 {
-		reserved += 4 + len(m.questions[0].Options) // border + header + options + other + hint
+		q := m.questions[0]
+		if m.textareaActive {
+			// border(1) + header(1) + question(1) + blank(1) + textarea(10) + blank(1) + hint(1)
+			reserved += 15
+		} else if q.Type == runner.QuestionTypeChoice {
+			// border(1) + header(1) + blank(1) + options + Other(1) + blank(1) + hint(1)
+			reserved += 5 + len(q.Options) + 1
+		} else {
+			// border(1) + header(1) + blank(1) + hint(1)
+			reserved += 4
+		}
 	}
 	h := m.height - reserved
 	if h < 1 {
@@ -705,6 +801,30 @@ func toolDescription(name string, input map[string]any) string {
 		val = val[:100] + "…"
 	}
 	return fmt.Sprintf("%s  %s", name, val)
+}
+
+// wordWrap breaks s into lines of at most width runes, splitting on spaces.
+func wordWrap(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	var result strings.Builder
+	lineLen := 0
+	for _, word := range strings.Fields(s) {
+		wl := len([]rune(word))
+		if lineLen > 0 {
+			if lineLen+1+wl > width {
+				result.WriteByte('\n')
+				lineLen = 0
+			} else {
+				result.WriteByte(' ')
+				lineLen++
+			}
+		}
+		result.WriteString(word)
+		lineLen += wl
+	}
+	return result.String()
 }
 
 func stripExt(name string) string {
