@@ -11,7 +11,11 @@ import (
 )
 
 func testWorkflow(label string) Workflow {
-	return Workflow{StatusLabel: label}
+	return Workflow{
+		Steps: []WorkflowStep{
+			{StatusLabel: label},
+		},
+	}
 }
 
 func TestToolDescription_KnownTool(t *testing.T) {

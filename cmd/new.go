@@ -7,6 +7,7 @@ import (
 
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/spec"
+	"github.com/jumppad-labs/spektacular/internal/steps"
 	"github.com/jumppad-labs/spektacular/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -38,7 +39,6 @@ creating a well-structured spec. Use --noninteractive to create a basic template
 		var specPath string
 
 		if useInteractive {
-			// Load config
 			configPath := filepath.Join(cwd, ".spektacular", "config.yaml")
 			var cfg config.Config
 			if _, err := os.Stat(configPath); err == nil {
@@ -50,8 +50,8 @@ creating a well-structured spec. Use --noninteractive to create a basic template
 				cfg = config.NewDefault()
 			}
 
-			// Run interactive TUI
-			specPath, err = tui.RunSpecCreatorTUI(name, cwd, cfg)
+			wf := steps.SpecCreatorWorkflow(name, cwd, cfg)
+			specPath, err = tui.RunAgentTUI(wf, cwd, cfg)
 			if err != nil {
 				return err
 			}

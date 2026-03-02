@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/runner"
 )
 
@@ -44,9 +43,9 @@ func (c *Claude) Run(opts runner.RunOptions) (<-chan runner.Event, <-chan error)
 
 func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	cfg := opts.Config
-	cmd := []string{cfg.Agent.Command, "-p", opts.Prompt}
-	if opts.SystemPrompt != "" {
-		cmd = append(cmd, "--system-prompt", opts.SystemPrompt)
+	cmd := []string{cfg.Agent.Command, "-p", opts.Prompts.User}
+	if opts.Prompts.System != "" {
+		cmd = append(cmd, "--system-prompt", opts.Prompts.System)
 	}
 	cmd = append(cmd, cfg.Agent.Args...)
 
@@ -85,10 +84,15 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	}
 
 	var debugLog *os.File
-	if cfg.Debug.Enabled {
-		debugLog = openDebugLog(cfg, opts.Command, opts.SessionID, cwd)
-		if debugLog != nil {
-			defer debugLog.Close()
+	if opts.LogFile != "" {
+		if err := os.MkdirAll(filepath.Dir(opts.LogFile), 0755); err == nil {
+			if f, err := os.OpenFile(opts.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				debugLog = f
+				defer debugLog.Close()
+				if opts.SessionID == "" {
+					fmt.Fprintf(debugLog, "\n\n========== NEW SESSION: %s ==========\n", time.Now().Format("15:04:05"))
+				}
+			}
 		}
 	}
 
@@ -116,28 +120,3 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	return nil
 }
 
-func openDebugLog(cfg config.Config, command, sessionID, cwd string) *os.File {
-	logDir := filepath.Join(cwd, cfg.Debug.LogDir)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil
-	}
-
-	// Use date-based log filename so all sessions on same day go to same file
-	// This keeps related conversations together and avoids creating many tiny files
-	date := time.Now().Format("2006-01-02")
-	filename := fmt.Sprintf("%s_%s_%s.log", date, cfg.Agent.Command, command)
-	logPath := filepath.Join(logDir, filename)
-
-	// Open in append mode if file exists, create if new
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil
-	}
-
-	// Add session separator if this is a new session (no sessionID yet)
-	if sessionID == "" {
-		fmt.Fprintf(f, "\n\n========== NEW SESSION: %s ==========\n", time.Now().Format("15:04:05"))
-	}
-
-	return f
-}

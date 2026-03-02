@@ -141,9 +141,129 @@ func detectQuestions(text string) []Question {
 // DetectQuestions is the exported wrapper used by other packages.
 func DetectQuestions(text string) []Question { return detectQuestions(text) }
 
+var finishedPattern = regexp.MustCompile(`<!--\s*FINISHED\s*-->`)
+
+// DetectFinished reports whether the agent output contains a <!-- FINISHED --> marker.
+func DetectFinished(text string) bool {
+	return finishedPattern.MatchString(text)
+}
+
+// StripFinishedTag removes the <!-- FINISHED --> marker from text before display.
+func StripFinishedTag(text string) string {
+	return strings.TrimSpace(finishedPattern.ReplaceAllString(text, ""))
+}
+
+// StripMarkers removes both the <!-- FINISHED --> and <!--QUESTION:...--> markers from
+// text before display. Use this instead of StripFinishedTag when rendering agent output.
+func StripMarkers(text string) string {
+	text = finishedPattern.ReplaceAllString(text, "")
+	text = questionPattern.ReplaceAllString(text, "")
+	return strings.TrimSpace(text)
+}
+
+// Prompts bundles the user prompt and system prompt for an agent invocation.
+type Prompts struct {
+	User   string // initial user message
+	System string // system prompt; empty uses the agent's default
+}
+
+// Step defines one agent step in a multi-step pipeline.
+type Step struct {
+	Prompts Prompts
+	LogFile string // path to debug log file; empty disables logging
+}
+
+// RunSteps executes a sequence of Steps in order. Within each step, questions are answered
+// by calling onQuestion and the session is resumed. Steps advance on <!-- FINISHED --> or
+// on a natural result event. Returns an error if any step fails.
+func RunSteps(
+	r Runner,
+	steps []Step,
+	cfg config.Config,
+	cwd string,
+	onText func(string),
+	onQuestion func([]Question) string,
+) error {
+	for _, step := range steps {
+		if err := runStep(r, step, cfg, cwd, onText, onQuestion); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runStep(
+	r Runner,
+	step Step,
+	cfg config.Config,
+	cwd string,
+	onText func(string),
+	onQuestion func([]Question) string,
+) error {
+	sessionID := ""
+	currentUser := step.Prompts.User
+
+	for {
+		var questionsFound []Question
+		var stepDone bool
+
+		events, errc := r.Run(RunOptions{
+			Prompts:   Prompts{User: currentUser, System: step.Prompts.System},
+			Config:    cfg,
+			SessionID: sessionID,
+			CWD:       cwd,
+			LogFile:   step.LogFile,
+		})
+
+		for event := range events {
+			if id := event.SessionID(); id != "" {
+				sessionID = id
+			}
+			if text := event.TextContent(); text != "" {
+				if DetectFinished(text) {
+					stepDone = true
+				}
+				displayText := StripFinishedTag(text)
+				if onText != nil && displayText != "" {
+					onText(displayText)
+				}
+				questionsFound = append(questionsFound, DetectQuestions(text)...)
+			}
+			if event.IsResult() {
+				if event.IsError() {
+					return fmt.Errorf("agent error: %s", event.ResultText())
+				}
+				stepDone = true
+			}
+		}
+
+		if err := <-errc; err != nil {
+			return fmt.Errorf("runner error: %w", err)
+		}
+
+		if !stepDone && len(questionsFound) > 0 && onQuestion != nil {
+			answer := onQuestion(questionsFound)
+			currentUser = answer
+			continue
+		}
+
+		return nil
+	}
+}
+
 // BuildPrompt assembles the user prompt: knowledge hint + spec content.
 func BuildPrompt(specContent string) string {
 	return BuildPromptWithHeader(specContent, "Specification to Plan")
+}
+
+// BuildPlanPrompt assembles the user prompt for the planner, including the exact
+// plan directory the agent must write its output files into.
+func BuildPlanPrompt(specContent, planDir string) string {
+	var b strings.Builder
+	b.WriteString("Additional project knowledge, architectural context, and past learnings can be found in `.spektacular/knowledge/`. Use your available tools to explore this directory as needed.\n\n")
+	fmt.Fprintf(&b, "Write all plan output files to this exact directory: `%s`\n\n", planDir)
+	fmt.Fprintf(&b, "---\n\n# Specification to Plan\n\n%s", specContent)
+	return b.String()
 }
 
 // BuildPromptWithHeader assembles the user prompt with a custom content section header.
@@ -156,11 +276,10 @@ func BuildPromptWithHeader(content string, header string) string {
 
 // RunOptions holds parameters for running an agent.
 type RunOptions struct {
-	Prompt       string
-	SystemPrompt string // passed as --system-prompt; use for agent specialization
-	Config       config.Config
-	SessionID    string
-	CWD          string
-	Command      string // used only for debug log filename
+	Prompts   Prompts
+	Config    config.Config
+	SessionID string
+	CWD       string
+	LogFile   string // path to debug log file; empty disables logging
 }
 

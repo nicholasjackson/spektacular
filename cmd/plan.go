@@ -8,6 +8,7 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/plan"
 	"github.com/jumppad-labs/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/steps"
 	"github.com/jumppad-labs/spektacular/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -36,18 +37,18 @@ var planCmd = &cobra.Command{
 			cfg = config.NewDefault()
 		}
 
-		var planDir string
+		var planDirOut string
 		if term.IsTerminal(int(os.Stdout.Fd())) {
-			planDir, err = tui.RunPlanTUI(specFile, cwd, cfg)
+			wf := steps.PlanWorkflow(specFile, cwd, cfg)
+			planDirOut, err = tui.RunAgentTUI(wf, cwd, cfg)
 			if err != nil {
 				return fmt.Errorf("plan generation failed: %w", err)
 			}
 		} else {
 			// No TTY — stream output to stdout directly
-			planDir, err = plan.RunPlan(specFile, cwd, cfg,
+			planDirOut, err = plan.RunPlan(specFile, cwd, cfg,
 				func(text string) { fmt.Print(text) },
 				func(questions []runner.Question) string {
-					// Non-interactive: print question and return empty answer
 					if len(questions) > 0 {
 						fmt.Printf("\n[Question] %s\n", questions[0].Question)
 					}
@@ -58,8 +59,8 @@ var planCmd = &cobra.Command{
 				return fmt.Errorf("plan generation failed: %w", err)
 			}
 		}
-		if planDir != "" {
-			fmt.Printf("Plan generated: %s\n", planDir)
+		if planDirOut != "" {
+			fmt.Printf("Plan generated: %s\n", planDirOut)
 		}
 		return nil
 	},

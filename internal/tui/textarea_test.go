@@ -26,7 +26,7 @@ func TestTextareaSubmit(t *testing.T) {
 		},
 		width:    80,
 		height:   24,
-		workflow: Workflow{StatusLabel: "Test"},
+		workflow: Workflow{Steps: []WorkflowStep{{StatusLabel: "Test"}}},
 		cfg:      config.NewDefault(),
 	}
 	m.initTextarea("placeholder")

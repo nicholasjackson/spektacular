@@ -8,6 +8,7 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/implement"
 	"github.com/jumppad-labs/spektacular/internal/runner"
+	"github.com/jumppad-labs/spektacular/internal/steps"
 	"github.com/jumppad-labs/spektacular/internal/tui"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -42,7 +43,8 @@ var implementCmd = &cobra.Command{
 		}
 
 		if term.IsTerminal(int(os.Stdout.Fd())) {
-			_, err = tui.RunImplementTUI(planDir, cwd, cfg)
+			wf := steps.ImplementWorkflow(planDir, cwd, cfg)
+			_, err = tui.RunAgentTUI(wf, cwd, cfg)
 			if err != nil {
 				return fmt.Errorf("implementation failed: %w", err)
 			}

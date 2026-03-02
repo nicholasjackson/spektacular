@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/defaults"
@@ -64,9 +65,8 @@ func ResolvePlanDir(arg, cwd string) (string, error) {
 		arg, filepath.Join(cwd, arg), arg)
 }
 
-// RunImplement executes the full implementation loop for the given plan directory.
-// onText is called with each text chunk from the agent (may be nil).
-// onQuestion is called when questions are detected; it must return the answer string.
+// RunImplement executes the implementation pipeline for the given plan directory.
+// onText is called with each text chunk; onQuestion is called when questions are detected.
 func RunImplement(
 	planDir, projectPath string,
 	cfg config.Config,
@@ -78,13 +78,10 @@ func RunImplement(
 		return "", err
 	}
 
-	agentPrompt := LoadAgentPrompt()
-	prompt := runner.BuildPromptWithHeader(planContent, "Implementation Plan")
-
 	if cfg.Debug.Enabled {
 		debugDir := filepath.Join(projectPath, ".spektacular", "debug")
 		_ = os.MkdirAll(debugDir, 0755)
-		_ = os.WriteFile(filepath.Join(debugDir, "implement-prompt.md"), []byte(prompt), 0644)
+		_ = os.WriteFile(filepath.Join(debugDir, "implement-prompt.md"), []byte(planContent), 0644)
 	}
 
 	r, err := runner.NewRunner(cfg)
@@ -92,53 +89,24 @@ func RunImplement(
 		return "", fmt.Errorf("creating runner: %w", err)
 	}
 
-	sessionID := ""
-	currentPrompt := prompt
-
-	for {
-		var questionsFound []runner.Question
-		var finalResult string
-
-		events, errc := r.Run(runner.RunOptions{
-			Prompt:       currentPrompt,
-			SystemPrompt: agentPrompt,
-			Config:       cfg,
-			SessionID:    sessionID,
-			CWD:          projectPath,
-			Command:      "implement",
-		})
-
-		for event := range events {
-			if id := event.SessionID(); id != "" {
-				sessionID = id
-			}
-			if text := event.TextContent(); text != "" {
-				if onText != nil {
-					onText(text)
-				}
-				questionsFound = append(questionsFound, runner.DetectQuestions(text)...)
-			}
-			if event.IsResult() {
-				if event.IsError() {
-					return "", fmt.Errorf("agent error: %s", event.ResultText())
-				}
-				finalResult = event.ResultText()
-			}
-		}
-
-		if err := <-errc; err != nil {
-			return "", fmt.Errorf("runner error: %w", err)
-		}
-
-		if len(questionsFound) > 0 && onQuestion != nil {
-			answer := onQuestion(questionsFound)
-			currentPrompt = answer
-			continue
-		}
-
-		if finalResult == "" {
-			return "", fmt.Errorf("agent completed without producing a result")
-		}
-		return planDir, nil
+	logFile := ""
+	if cfg.Debug.Enabled && cfg.Debug.LogDir != "" {
+		logDir := filepath.Join(projectPath, cfg.Debug.LogDir)
+		_ = os.MkdirAll(logDir, 0755)
+		logFile = filepath.Join(logDir, time.Now().Format("2006-01-02")+"_implement.log")
 	}
+
+	if err := runner.RunSteps(r, []runner.Step{
+		{
+			Prompts: runner.Prompts{
+				User:   runner.BuildPromptWithHeader(planContent, "Implementation Plan"),
+				System: LoadAgentPrompt(),
+			},
+			LogFile: logFile,
+		},
+	}, cfg, projectPath, onText, onQuestion); err != nil {
+		return "", err
+	}
+
+	return planDir, nil
 }

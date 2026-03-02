@@ -3,7 +3,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,10 +12,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jumppad-labs/spektacular/internal/config"
-	"github.com/jumppad-labs/spektacular/internal/implement"
-	"github.com/jumppad-labs/spektacular/internal/plan"
 	"github.com/jumppad-labs/spektacular/internal/runner"
-	"github.com/jumppad-labs/spektacular/internal/spec"
 )
 
 // ---------------------------------------------------------------------------
@@ -39,19 +35,23 @@ type agentErrMsg struct{ err error } // runner returned an error
 // Workflow
 // ---------------------------------------------------------------------------
 
-// Workflow defines the agent-specific behaviour for the TUI.
-// Both plan and implement supply their own Workflow to customise
-// prompt construction and result handling.
+// WorkflowStep defines one step in a multi-step TUI workflow.
+// BuildRunOptions is called at step start to produce the runner options.
+// The TUI handles all BubbleTea machinery; callers only supply data.
+type WorkflowStep struct {
+	StatusLabel     string
+	BuildRunOptions func(cfg config.Config, cwd string) (runner.RunOptions, error)
+}
+
+// Workflow defines a multi-step agent pipeline for the TUI.
+// Steps are executed in order; OnDone is called after the last step completes.
+// LogFile is the debug log path for the whole workflow run; empty disables logging.
+// Preamble is optional markdown text displayed in the viewport before the first step runs.
 type Workflow struct {
-	// StatusLabel is shown in the "thinking" status bar.
-	StatusLabel string
-
-	// Start returns a tea.Cmd that builds the prompt and spawns the runner.
-	Start func(cfg config.Config, sessionID string) tea.Cmd
-
-	// OnResult is called when the agent produces a terminal result event.
-	// Returns the output directory path or an error.
-	OnResult func(resultText string) (string, error)
+	LogFile  string
+	Preamble string
+	Steps    []WorkflowStep
+	OnDone   func() (string, error)
 }
 
 // ---------------------------------------------------------------------------
@@ -75,15 +75,16 @@ type model struct {
 	otherText  string
 
 	// Enhanced text input state
-	textareaActive bool          // True when textarea has focus
+	textareaActive bool           // True when textarea has focus
 	textarea       textarea.Model // Multi-line text input component
 
 	// state
-	themeIdx   int
-	followMode bool
-	detailMode bool
-	done       bool
-	statusText string
+	themeIdx    int
+	followMode  bool
+	detailMode  bool
+	done        bool
+	statusText  string
+	currentStep int // index into workflow.Steps
 
 	// result
 	resultDir string
@@ -94,18 +95,31 @@ type model struct {
 	projectPath string
 	cfg         config.Config
 	sessionID   string
-	command     string // command type: "plan", "implement", or "interactive"
+	logFile     string // path to debug log for the current step; empty disables logging
 }
 
 func initialModel(wf Workflow, projectPath string, cfg config.Config) model {
+	label := ""
+	if len(wf.Steps) > 0 {
+		label = wf.Steps[0].StatusLabel
+	}
 	return model{
 		workflow:    wf,
 		projectPath: projectPath,
 		cfg:         cfg,
 		themeIdx:    0, // dracula
 		followMode:  true,
-		statusText:  "* thinking  " + wf.StatusLabel,
+		statusText:  "* thinking  " + label,
+		logFile:     wf.LogFile,
 	}
+}
+
+// currentStepLabel returns the StatusLabel of the active step.
+func (m model) currentStepLabel() string {
+	if m.currentStep < len(m.workflow.Steps) {
+		return m.workflow.Steps[m.currentStep].StatusLabel
+	}
+	return ""
 }
 
 // initTextarea creates and configures a new textarea
@@ -130,50 +144,71 @@ func (m *model) initTextarea(placeholder string) {
 // ---------------------------------------------------------------------------
 
 func (m model) Init() tea.Cmd {
-	return m.workflow.Start(m.cfg, "")
+	return m.startCurrentStep()
 }
 
-// startAgentCmd builds the prompt and spawns the runner, returning the first
-// event (or error) as a message. Channels flow forward via agentEventMsg.
-func startAgentCmd(specPath, projectPath string, cfg config.Config, sessionID string) tea.Cmd {
+// startCurrentStep builds a tea.Cmd that starts the current workflow step.
+func (m model) startCurrentStep() tea.Cmd {
+	if m.currentStep >= len(m.workflow.Steps) {
+		return nil
+	}
+	step := m.workflow.Steps[m.currentStep]
+	logFile := m.logFile
+	sessionID := m.sessionID // carry session forward so the model retains context
 	return func() tea.Msg {
-		specContent, err := os.ReadFile(specPath)
+		opts, err := step.BuildRunOptions(m.cfg, m.projectPath)
 		if err != nil {
-			return agentErrMsg{err: fmt.Errorf("reading spec: %w", err)}
+			return agentErrMsg{err: fmt.Errorf("building run options: %w", err)}
 		}
-		agentPrompt := plan.LoadAgentPrompt()
-		prompt := runner.BuildPrompt(string(specContent))
-
-		planDir := filepath.Join(projectPath, ".spektacular", "plans", stripExt(filepath.Base(specPath)))
-		if err := plan.PreparePlanDir(planDir); err != nil {
-			return agentErrMsg{err: fmt.Errorf("preparing plan directory: %w", err)}
-		}
-
-		if cfg.Debug.Enabled {
-			debugDir := filepath.Join(projectPath, ".spektacular", "debug")
-			_ = os.MkdirAll(debugDir, 0755)
-			_ = os.WriteFile(filepath.Join(debugDir, "plan-prompt.md"), []byte(prompt), 0644)
-		}
-
-		r, err := runner.NewRunner(cfg)
+		opts.LogFile = logFile
+		opts.SessionID = sessionID
+		r, err := runner.NewRunner(m.cfg)
 		if err != nil {
 			return agentErrMsg{err: fmt.Errorf("creating runner: %w", err)}
 		}
-
-		events, errc := r.Run(runner.RunOptions{
-			Prompt:       prompt,
-			SystemPrompt: agentPrompt,
-			Config:       cfg,
-			SessionID:    sessionID,
-			CWD:          projectPath,
-			Command:      "plan",
-		})
+		events, errc := r.Run(opts)
 		return readNext(events, errc)
 	}
 }
 
+// advanceStep moves to the next workflow step, or calls OnDone if all steps are complete.
+func (m model) advanceStep() (tea.Model, tea.Cmd) {
+	m.currentStep++
+	if m.currentStep < len(m.workflow.Steps) {
+		m.questions = nil
+		m.answers = nil
+		m.textareaActive = false
+		m.statusText = "* thinking  " + m.workflow.Steps[m.currentStep].StatusLabel
+		return m, m.startCurrentStep()
+	}
+	// All steps done.
+	if m.workflow.OnDone != nil {
+		resultDir, err := m.workflow.OnDone()
+		if err != nil {
+			m.errMsg = err.Error()
+			m.done = true
+			m.statusText = "error  press q to exit"
+			p := m.currentPalette()
+			m = m.withLine(lipgloss.NewStyle().Foreground(p.errColor).Render("• error: "+m.errMsg) + "\n")
+			return m, nil
+		}
+		m.resultDir = resultDir
+	}
+	m.done = true
+	m.statusText = "done  press q to exit"
+	p := m.currentPalette()
+	if m.resultDir != "" {
+		m = m.withLine(lipgloss.NewStyle().Foreground(p.success).Render(
+			fmt.Sprintf("• completed  output: %s", m.resultDir),
+		) + "\n")
+	} else {
+		m = m.withLine(lipgloss.NewStyle().Foreground(p.success).Render("• completed") + "\n")
+	}
+	return m, nil
+}
+
 // resumeAgentCmd starts a new runner turn with the user's answer.
-func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer, command string) tea.Cmd {
+func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer, logFile string) tea.Cmd {
 	return func() tea.Msg {
 		r, err := runner.NewRunner(cfg)
 		if err != nil {
@@ -181,11 +216,11 @@ func resumeAgentCmd(cfg config.Config, sessionID, projectPath, answer, command s
 		}
 
 		events, errc := r.Run(runner.RunOptions{
-			Prompt:    answer,
+			Prompts:   runner.Prompts{User: answer},
 			Config:    cfg,
 			SessionID: sessionID,
 			CWD:       projectPath,
-			Command:   command,
+			LogFile:   logFile,
 		})
 		return readNext(events, errc)
 	}
@@ -228,6 +263,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vp.MouseWheelEnabled = true
 			m.vp.SetContent(strings.Join(m.content, ""))
 			m.ready = true
+			if m.workflow.Preamble != "" {
+				rendered := m.renderMarkdown(m.workflow.Preamble)
+				p := m.currentPalette()
+				bullet := lipgloss.NewStyle().Foreground(p.output).Render("•")
+				m = m.withLine(bulletPrefix(bullet, rendered) + "\n")
+			}
 		} else {
 			m.vp.Width = msg.Width
 			m.vp.Height = m.viewportHeight()
@@ -312,6 +353,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			q := m.questions[0]
 			placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
 			m.initTextarea(placeholder)
+			m.syncViewport()
 			return m, nil
 		}
 
@@ -349,8 +391,8 @@ func (m model) handleOtherInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		answer := strings.Join(m.answers, "\n")
 		m.answers = nil
-		m.statusText = "* thinking  " + m.workflow.StatusLabel
-		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.command)
+		m.statusText = "* thinking  " + m.currentStepLabel()
+		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.logFile)
 
 	case "esc":
 		m.otherInput = false
@@ -412,19 +454,22 @@ func (m model) handleTextareaInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				placeholder := fmt.Sprintf("Enter your response for %s...", nextQ.Header)
 				m.initTextarea(placeholder)
 			}
+			m.syncViewport()
 			return m, nil
 		}
 
 		// All questions answered, resume agent
 		fullAnswer := joinAnswers(m.answers)
 		m.answers = nil
-		m.statusText = "* thinking  " + m.workflow.StatusLabel
-		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, fullAnswer, m.command)
+		m.statusText = "* thinking  " + m.currentStepLabel()
+		m.syncViewport()
+		return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, fullAnswer, m.logFile)
 
 	case "esc":
 		// Cancel input
 		m.textareaActive = false
 		m.textarea.Reset()
+		m.syncViewport()
 		return m, nil
 
 	case "ctrl+c":
@@ -470,6 +515,7 @@ func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
 		// "Other" selected — open textarea
 		placeholder := fmt.Sprintf("Enter your response for %s...", q.Header)
 		m.initTextarea(placeholder)
+		m.syncViewport()
 		return m, nil
 	}
 
@@ -497,8 +543,8 @@ func (m model) handleNumberKey(key string) (tea.Model, tea.Cmd) {
 
 	answer := joinAnswers(m.answers)
 	m.answers = nil
-	m.statusText = "* thinking  " + m.workflow.StatusLabel
-	return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.command)
+	m.statusText = "* thinking  " + m.currentStepLabel()
+	return m, resumeAgentCmd(m.cfg, m.sessionID, m.projectPath, answer, m.logFile)
 }
 
 // handleAgentEvent processes one event from the runner.
@@ -532,10 +578,14 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 	// Text content — render and append
 	if text := event.TextContent(); text != "" {
 		m.toolLine = ""
-		rendered := m.renderMarkdown(text)
-		p := m.currentPalette()
-		bullet := lipgloss.NewStyle().Foreground(p.output).Render("•")
-		m = m.withLine(bulletPrefix(bullet, rendered) + "\n")
+		finished := runner.DetectFinished(text)
+		displayText := runner.StripMarkers(text)
+		if displayText != "" {
+			rendered := m.renderMarkdown(displayText)
+			p := m.currentPalette()
+			bullet := lipgloss.NewStyle().Foreground(p.output).Render("•")
+			m = m.withLine(bulletPrefix(bullet, rendered) + "\n")
+		}
 
 		newQuestions := runner.DetectQuestions(text)
 		m.questions = append(m.questions, newQuestions...)
@@ -549,13 +599,15 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Sync viewport height after questions are appended (withLine runs before append).
-		if m.ready {
-			m.vp.Height = m.viewportHeight()
+		// Sync viewport height now that questions/textarea state is final.
+		m.syncViewport()
+
+		if finished {
+			return m.advanceStep()
 		}
 	}
 
-	// Result event — terminal
+	// Result event — advance to next step or complete.
 	if event.IsResult() {
 		m.toolLine = "" // clear any lingering tool status
 		if event.IsError() {
@@ -566,22 +618,12 @@ func (m model) handleAgentEvent(msg agentEventMsg) (tea.Model, tea.Cmd) {
 			m = m.withLine(lipgloss.NewStyle().Foreground(p.errColor).Render("• "+m.errMsg) + "\n")
 			return m, nil
 		}
-
-		resultDir, err := m.workflow.OnResult(event.ResultText())
-		if err != nil {
-			m.errMsg = err.Error()
-			m.done = true
-			m.statusText = "error  press q to exit"
+		// If questions are still pending, wait for the user to answer before advancing.
+		// The user's answer will resume the session via resumeAgentCmd.
+		if len(m.questions) > 0 {
 			return m, nil
 		}
-		m.resultDir = resultDir
-		m.done = true
-		m.statusText = "done  press q to exit"
-		p := m.currentPalette()
-		m = m.withLine(lipgloss.NewStyle().Foreground(p.success).Render(
-			fmt.Sprintf("• completed  output: %s", resultDir),
-		) + "\n")
-		return m, nil
+		return m.advanceStep()
 	}
 
 	// Not a result — keep reading
@@ -721,27 +763,51 @@ func (m model) withLine(s string) model {
 	return m
 }
 
+// syncViewport updates the viewport height to match the current layout state.
+// Call this whenever textareaActive or questions change outside of withLine.
+func (m *model) syncViewport() {
+	if m.ready {
+		m.vp.Height = m.viewportHeight()
+		m.vp.SetContent(strings.Join(m.content, ""))
+	}
+}
+
+// questionPanelLines returns the actual number of terminal lines the question panel occupies.
+// This accounts for multi-line question text after word-wrapping.
+func (m model) questionPanelLines() int {
+	if len(m.questions) == 0 {
+		return 0
+	}
+	q := m.questions[0]
+	wrapWidth := m.width - 6 // matches renderQuestionPanel
+	if wrapWidth < 20 {
+		wrapWidth = 20
+	}
+	questionLines := strings.Count(wordWrap(q.Question, wrapWidth), "\n") + 1
+
+	if m.textareaActive {
+		// border(1) + header(1) + question(N) + blank(1) + textarea + blank(1) + hint(1)
+		return 1 + 1 + questionLines + 1 + m.textarea.Height() + 1 + 1
+	}
+	if q.Type == runner.QuestionTypeChoice {
+		// border(1) + header(1) + question(N) + blank(1) + options + Other(1) + blank(1) + hint(1)
+		return 1 + 1 + questionLines + 1 + len(q.Options) + 1 + 1 + 1
+	}
+	// Text type, textarea not yet active: border(1) + header(1) + question(N) + blank(1) + hint(1)
+	return 1 + 1 + questionLines + 1 + 1
+}
+
 func (m model) viewportHeight() int {
 	reserved := 1 // status bar
 	if m.toolLine != "" {
 		reserved++
 	}
 	if len(m.questions) > 0 {
-		q := m.questions[0]
-		if m.textareaActive {
-			// border(1) + header(1) + question(1) + blank(1) + textarea(10) + blank(1) + hint(1)
-			reserved += 15
-		} else if q.Type == runner.QuestionTypeChoice {
-			// border(1) + header(1) + blank(1) + options + Other(1) + blank(1) + hint(1)
-			reserved += 5 + len(q.Options) + 1
-		} else {
-			// border(1) + header(1) + blank(1) + hint(1)
-			reserved += 4
-		}
+		reserved += m.questionPanelLines()
 	}
 	h := m.height - reserved
-	if h < 1 {
-		h = 1
+	if h < 3 {
+		h = 3
 	}
 	return h
 }
@@ -803,11 +869,21 @@ func toolDescription(name string, input map[string]any) string {
 	return fmt.Sprintf("%s  %s", name, val)
 }
 
-// wordWrap breaks s into lines of at most width runes, splitting on spaces.
+// wordWrap breaks s into lines of at most width runes, preserving existing newlines.
 func wordWrap(s string, width int) string {
 	if width <= 0 {
 		return s
 	}
+	paragraphs := strings.Split(s, "\n")
+	wrapped := make([]string, len(paragraphs))
+	for i, p := range paragraphs {
+		wrapped[i] = wrapLine(p, width)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+// wrapLine wraps a single line (no embedded newlines) to at most width runes.
+func wrapLine(s string, width int) string {
 	var result strings.Builder
 	lineLen := 0
 	for _, word := range strings.Fields(s) {
@@ -841,9 +917,8 @@ func stripExt(name string) string {
 
 // RunAgentTUI is the generic TUI entry point. Callers provide a Workflow that
 // controls how the prompt is built and how the result is handled.
-func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config, command string) (string, error) {
+func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config) (string, error) {
 	m := initialModel(wf, projectPath, cfg)
-	m.command = command
 
 	p := tea.NewProgram(
 		m,
@@ -863,120 +938,3 @@ func RunAgentTUI(wf Workflow, projectPath string, cfg config.Config, command str
 	return fm.resultDir, nil
 }
 
-// RunImplementTUI launches the interactive TUI for plan implementation.
-// Returns the plan directory path on success, or empty string if the user quit early.
-func RunImplementTUI(planDir, projectPath string, cfg config.Config) (string, error) {
-	wf := Workflow{
-		StatusLabel: filepath.Base(planDir),
-		Start: func(c config.Config, sessionID string) tea.Cmd {
-			return implementStartCmd(planDir, projectPath, c, sessionID)
-		},
-		OnResult: func(_ string) (string, error) {
-			return planDir, nil
-		},
-	}
-	return RunAgentTUI(wf, projectPath, cfg, "implement")
-}
-
-// implementStartCmd builds the implement prompt and spawns the runner.
-func implementStartCmd(planDir, projectPath string, cfg config.Config, sessionID string) tea.Cmd {
-	return func() tea.Msg {
-		planContent, err := implement.LoadPlanContent(planDir)
-		if err != nil {
-			return agentErrMsg{err: fmt.Errorf("loading plan: %w", err)}
-		}
-		agentPrompt := implement.LoadAgentPrompt()
-		prompt := runner.BuildPromptWithHeader(planContent, "Implementation Plan")
-
-		if cfg.Debug.Enabled {
-			debugDir := filepath.Join(projectPath, ".spektacular", "debug")
-			_ = os.MkdirAll(debugDir, 0755)
-			_ = os.WriteFile(filepath.Join(debugDir, "implement-prompt.md"), []byte(prompt), 0644)
-		}
-
-		r, err := runner.NewRunner(cfg)
-		if err != nil {
-			return agentErrMsg{err: fmt.Errorf("creating runner: %w", err)}
-		}
-
-		events, errc := r.Run(runner.RunOptions{
-			Prompt:       prompt,
-			SystemPrompt: agentPrompt,
-			Config:       cfg,
-			SessionID:    sessionID,
-			CWD:          projectPath,
-			Command:      "implement",
-		})
-		return readNext(events, errc)
-	}
-}
-
-// RunPlanTUI launches the interactive TUI for plan generation.
-// Returns the plan directory path on success, or empty string if the user quit early.
-func RunPlanTUI(specPath, projectPath string, cfg config.Config) (string, error) {
-	wf := Workflow{
-		StatusLabel: filepath.Base(specPath),
-		Start: func(c config.Config, sessionID string) tea.Cmd {
-			return startAgentCmd(specPath, projectPath, c, sessionID)
-		},
-		OnResult: func(resultText string) (string, error) {
-			specName := stripExt(filepath.Base(specPath))
-			planDir := filepath.Join(projectPath, ".spektacular", "plans", specName)
-			if err := plan.WritePlanOutput(planDir, resultText); err != nil {
-				return "", err
-			}
-			return planDir, nil
-		},
-	}
-	return RunAgentTUI(wf, projectPath, cfg, "plan")
-}
-
-// RunSpecCreatorTUI launches the interactive spec creation TUI
-func RunSpecCreatorTUI(name, projectPath string, cfg config.Config) (string, error) {
-	workflow := Workflow{
-		StatusLabel: "Creating specification",
-		Start: func(c config.Config, sessionID string) tea.Cmd {
-			return specCreatorStartCmd(name, projectPath, c, sessionID)
-		},
-		OnResult: func(resultText string) (string, error) {
-			// Agent should have written the spec via Write tool
-			// The result text is just confirmation
-			return "", nil
-		},
-	}
-
-	// Use generic RunAgentTUI with spec creator workflow
-	return RunAgentTUI(workflow, projectPath, cfg, "interactive")
-}
-
-// specCreatorStartCmd builds the initial prompt and spawns the runner
-func specCreatorStartCmd(name, projectPath string, cfg config.Config, sessionID string) tea.Cmd {
-	return func() tea.Msg {
-		// Get agent system prompt
-		agentPrompt := spec.LoadInteractiveAgentPrompt()
-
-		// Build initial prompt with spec name context
-		initialPrompt := runner.BuildPromptWithHeader(
-			fmt.Sprintf("Create a new specification file named '%s.md'. Guide the user through filling out each section interactively.", name),
-			"Create Specification",
-		)
-
-		// Create runner
-		r, err := runner.NewRunner(cfg)
-		if err != nil {
-			return agentErrMsg{err: fmt.Errorf("creating runner: %w", err)}
-		}
-
-		// Run agent
-		events, errc := r.Run(runner.RunOptions{
-			Prompt:       initialPrompt,
-			SystemPrompt: agentPrompt,
-			Config:       cfg,
-			SessionID:    sessionID,
-			CWD:          projectPath,
-			Command:      "interactive",
-		})
-
-		return readNext(events, errc)
-	}
-}

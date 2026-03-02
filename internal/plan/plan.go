@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/defaults"
@@ -75,10 +76,8 @@ func WritePlanOutput(planDir, _ string) error {
 	return nil
 }
 
-// RunPlan executes the full plan-generation loop for specPath.
-// It prints progress to stdout and returns the plan directory path on success.
-// onText is called with each text chunk from the agent (may be nil).
-// onQuestion is called when questions are detected; it must return the answer string.
+// RunPlan executes the plan-generation pipeline for specPath.
+// onText is called with each text chunk; onQuestion is called when questions are detected.
 func RunPlan(
 	specPath, projectPath string,
 	cfg config.Config,
@@ -90,9 +89,6 @@ func RunPlan(
 		return "", fmt.Errorf("reading spec file: %w", err)
 	}
 
-	agentPrompt := LoadAgentPrompt()
-	prompt := runner.BuildPrompt(string(specContent))
-
 	specName := stripExt(filepath.Base(specPath))
 	planDir := filepath.Join(projectPath, ".spektacular", "plans", specName)
 
@@ -103,7 +99,7 @@ func RunPlan(
 	if cfg.Debug.Enabled {
 		debugDir := filepath.Join(projectPath, ".spektacular", "debug")
 		_ = os.MkdirAll(debugDir, 0755)
-		_ = os.WriteFile(filepath.Join(debugDir, "plan-prompt.md"), []byte(prompt), 0644)
+		_ = os.WriteFile(filepath.Join(debugDir, "plan-prompt.md"), specContent, 0644)
 	}
 
 	r, err := runner.NewRunner(cfg)
@@ -111,58 +107,29 @@ func RunPlan(
 		return "", fmt.Errorf("creating runner: %w", err)
 	}
 
-	sessionID := ""
-	currentPrompt := prompt
-
-	for {
-		var questionsFound []runner.Question
-		var finalResult string
-
-		events, errc := r.Run(runner.RunOptions{
-			Prompt:       currentPrompt,
-			SystemPrompt: agentPrompt,
-			Config:       cfg,
-			SessionID:    sessionID,
-			CWD:          projectPath,
-			Command:      "plan",
-		})
-
-		for event := range events {
-			if id := event.SessionID(); id != "" {
-				sessionID = id
-			}
-			if text := event.TextContent(); text != "" {
-				if onText != nil {
-					onText(text)
-				}
-				questionsFound = append(questionsFound, runner.DetectQuestions(text)...)
-			}
-			if event.IsResult() {
-				if event.IsError() {
-					return "", fmt.Errorf("agent error: %s", event.ResultText())
-				}
-				finalResult = event.ResultText()
-			}
-		}
-
-		if err := <-errc; err != nil {
-			return "", fmt.Errorf("runner error: %w", err)
-		}
-
-		if len(questionsFound) > 0 && onQuestion != nil {
-			answer := onQuestion(questionsFound)
-			currentPrompt = answer
-			continue
-		}
-
-		if finalResult == "" {
-			return "", fmt.Errorf("agent completed without producing a result")
-		}
-		if err := WritePlanOutput(planDir, finalResult); err != nil {
-			return "", err
-		}
-		return planDir, nil
+	logFile := ""
+	if cfg.Debug.Enabled && cfg.Debug.LogDir != "" {
+		logDir := filepath.Join(projectPath, cfg.Debug.LogDir)
+		_ = os.MkdirAll(logDir, 0755)
+		logFile = filepath.Join(logDir, time.Now().Format("2006-01-02")+"_plan.log")
 	}
+
+	if err := runner.RunSteps(r, []runner.Step{
+		{
+			Prompts: runner.Prompts{
+				User:   runner.BuildPrompt(string(specContent)),
+				System: LoadAgentPrompt(),
+			},
+			LogFile: logFile,
+		},
+	}, cfg, projectPath, onText, onQuestion); err != nil {
+		return "", err
+	}
+
+	if err := WritePlanOutput(planDir, ""); err != nil {
+		return "", err
+	}
+	return planDir, nil
 }
 
 func stripExt(name string) string {

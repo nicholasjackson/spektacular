@@ -74,7 +74,37 @@ func toTitle(name string) string {
 	return strings.Join(words, " ")
 }
 
-// LoadInteractiveAgentPrompt returns the spec creator agent system prompt
-func LoadInteractiveAgentPrompt() string {
-	return string(defaults.MustReadFile("agents/spec-creator.md"))
+// InitTemplate creates the spec file at specPath with the standard template structure,
+// deriving the title from the file name. It is a no-op if the file already exists.
+func InitTemplate(specPath string) error {
+	if _, err := os.Stat(specPath); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(specPath), 0755); err != nil {
+		return fmt.Errorf("creating specs directory: %w", err)
+	}
+	name := strings.TrimSuffix(filepath.Base(specPath), filepath.Ext(specPath))
+	title := toTitle(name)
+
+	templateBytes, err := defaults.ReadFile("spec-template.md")
+	if err != nil {
+		return fmt.Errorf("reading spec template: %w", err)
+	}
+	content := strings.ReplaceAll(string(templateBytes), "{title}", title)
+	content = strings.ReplaceAll(content, "{description}", "")
+	content = strings.ReplaceAll(content, "- [ ] **{Requirement title}**\n  {Describe what must be true and any relevant detail.}", "")
+	content = strings.ReplaceAll(content, "- [ ] **{Criteria title}**\n  {Describe exactly what can be observed or tested to confirm this passes.}", "")
+
+	if err := os.WriteFile(specPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing spec file: %w", err)
+	}
+	return nil
 }
+
+// LoadAgentSystemPrompt returns the shared minimal system prompt for the spec creator agent.
+// It defines the agent's role, question format rules, and completion signal only —
+// the specific task instructions for each section live in the user prompts.
+func LoadAgentSystemPrompt() string {
+	return string(defaults.MustReadFile("agents/spec.md"))
+}
+
