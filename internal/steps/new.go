@@ -127,6 +127,19 @@ Write their response to the Non-Goals section. If blank, write 'None.' Then outp
 
 <!-- FINISHED -->`
 
+var verifyMsg = `The spec file is at '%s'. Read it in full.
+
+Your task for this session: validate the completed specification.
+
+1. Read the spec file.
+2. Explore the codebase and '.spektacular/knowledge/' for relevant context.
+3. Validate every section (Overview, Requirements, Acceptance Criteria, Constraints, Technical Approach, Success Metrics, Non-Goals) for completeness, clarity, testability, and cross-section consistency.
+4. Report PASS or ISSUE for each section with specific reasons.
+5. If you found codebase context that resolves ambiguities, validate those assumptions with the user before accepting them.
+6. If there are issues or unconfirmed assumptions, ask the user for clarification using the question format.
+7. After receiving answers, edit the spec file with resolved clarifications, then output: <!-- GOTO: verify -->
+8. When all sections pass and no questions remain, output a brief confirmation summary, then output: <!-- FINISHED -->`
+
 // SpecCreatorWorkflow returns the TUI workflow for interactively creating a spec file.
 // The workflow runs one step per spec section.
 func SpecCreatorWorkflow(name, projectPath string, cfg config.Config) tui.Workflow {
@@ -144,9 +157,9 @@ func SpecCreatorWorkflow(name, projectPath string, cfg config.Config) tui.Workfl
 	return tui.Workflow{
 		LogFile: logFile,
 		Preamble: "## Creating spec: " + name + "\n\n" +
-			"I'll guide you through **7 sections** to build a complete specification. " +
+			"I'll guide you through **7 sections** to build a complete specification, then verify it. " +
 			"Answer each question when prompted — the spec file is updated as we go.\n\n" +
-			"**Sections:** Overview → Requirements → Acceptance Criteria → Constraints → Technical Approach → Success Metrics → Non-Goals",
+			"**Sections:** Overview → Requirements → Acceptance Criteria → Constraints → Technical Approach → Success Metrics → Non-Goals → Verification",
 		Steps: []tui.WorkflowStep{
 			overviewStep(specPath),
 			requirementsStep(specPath),
@@ -155,6 +168,7 @@ func SpecCreatorWorkflow(name, projectPath string, cfg config.Config) tui.Workfl
 			technicalApproachStep(specPath),
 			successMetricsStep(specPath),
 			nonGoalsStep(specPath),
+			verifyStep(specPath),
 		},
 		OnDone: func() (string, error) {
 			return specPath, nil
@@ -286,6 +300,24 @@ func nonGoalsStep(specPath string) tui.WorkflowStep {
 				Config:  cfg,
 				CWD:     cwd,
 				Model:   "claude-haiku-4-5-20251001",
+			}, nil
+		},
+	}
+}
+
+func verifyStep(specPath string) tui.WorkflowStep {
+	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(verifyMsg, specPath), "Spec Verification")
+	systemPrompt := spec.LoadVerifyAgentSystemPrompt()
+
+	return tui.WorkflowStep{
+		Name:        "verify",
+		StatusLabel: "verifying spec",
+		BuildRunOptions: func(cfg config.Config, cwd string) (runner.RunOptions, error) {
+			return runner.RunOptions{
+				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
+				Config:  cfg,
+				CWD:     cwd,
+				Model:   "claude-sonnet-4-6",
 			}, nil
 		},
 	}

@@ -87,3 +87,9 @@ func TestCreate_DoesNotDuplicateExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "with-ext.md", filepath.Base(path))
 }
+
+func TestLoadVerifyAgentSystemPrompt_ReturnsNonEmpty(t *testing.T) {
+	prompt := LoadVerifyAgentSystemPrompt()
+	require.NotEmpty(t, prompt)
+	require.Contains(t, prompt, "verification")
+}

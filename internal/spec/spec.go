@@ -173,3 +173,10 @@ func LoadAgentSystemPrompt() string {
 	return string(defaults.MustReadFile("agents/spec.md"))
 }
 
+// LoadVerifyAgentSystemPrompt returns the system prompt for the spec verification agent.
+// The agent reads the completed spec, explores the codebase for context, validates every
+// section, and iterates with the user via GOTO until all sections pass.
+func LoadVerifyAgentSystemPrompt() string {
+	return string(defaults.MustReadFile("agents/verify.md"))
+}
+
