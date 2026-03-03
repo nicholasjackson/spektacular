@@ -10,12 +10,6 @@ import (
 
 var envVarPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
-// APIConfig holds API-related configuration.
-type APIConfig struct {
-	AnthropicAPIKey string `yaml:"anthropic_api_key"`
-	Timeout         int    `yaml:"timeout"`
-}
-
 // ModelTiers defines model names for each complexity tier.
 type ModelTiers struct {
 	Simple  string `yaml:"simple"`
@@ -64,7 +58,6 @@ type AgentConfig struct {
 
 // Config is the top-level Spektacular configuration.
 type Config struct {
-	API        APIConfig        `yaml:"api"`
 	Models     ModelsConfig     `yaml:"models"`
 	Complexity ComplexityConfig `yaml:"complexity"`
 	Output     OutputConfig     `yaml:"output"`
@@ -75,10 +68,6 @@ type Config struct {
 // NewDefault returns a Config populated with default values.
 func NewDefault() Config {
 	return Config{
-		API: APIConfig{
-			AnthropicAPIKey: "${ANTHROPIC_API_KEY}",
-			Timeout:         60,
-		},
 		Models: ModelsConfig{
 			Default: "anthropic/claude-3-5-sonnet-20241022",
 			Tiers: ModelTiers{

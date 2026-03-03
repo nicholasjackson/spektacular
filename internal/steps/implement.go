@@ -51,7 +51,7 @@ func implementStep(planDir string) tui.WorkflowStep {
 				},
 				Config: cfg,
 				CWD:    cwd,
-				Model:  "claude-sonnet-4-6",
+				Model:  cfg.Models.Tiers.Medium,
 			}, nil
 		},
 	}

@@ -191,7 +191,7 @@ func overviewStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -209,7 +209,7 @@ func requirementsStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -227,7 +227,7 @@ func acStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -245,7 +245,7 @@ func constraintsStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -263,7 +263,7 @@ func technicalApproachStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -281,7 +281,7 @@ func successMetricsStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -299,7 +299,7 @@ func nonGoalsStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-haiku-4-5-20251001",
+				Model:   cfg.Models.Tiers.Simple,
 			}, nil
 		},
 	}
@@ -317,7 +317,7 @@ func verifyStep(specPath string) tui.WorkflowStep {
 				Prompts: runner.Prompts{User: userPrompt, System: systemPrompt},
 				Config:  cfg,
 				CWD:     cwd,
-				Model:   "claude-sonnet-4-6",
+				Model:   cfg.Models.Tiers.Medium,
 			}, nil
 		},
 	}

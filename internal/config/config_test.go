@@ -11,8 +11,6 @@ import (
 func TestNewDefault_HasExpectedDefaults(t *testing.T) {
 	cfg := NewDefault()
 
-	require.Equal(t, "${ANTHROPIC_API_KEY}", cfg.API.AnthropicAPIKey)
-	require.Equal(t, 60, cfg.API.Timeout)
 	require.Equal(t, "anthropic/claude-3-5-sonnet-20241022", cfg.Models.Default)
 	require.Equal(t, "anthropic/claude-3-5-haiku-20241022", cfg.Models.Tiers.Simple)
 	require.Equal(t, "anthropic/claude-3-5-sonnet-20241022", cfg.Models.Tiers.Medium)
@@ -24,12 +22,11 @@ func TestNewDefault_HasExpectedDefaults(t *testing.T) {
 }
 
 func TestFromYAMLFile_LoadsAndExpandsEnvVars(t *testing.T) {
-	t.Setenv("TEST_API_KEY", "sk-test-123")
+	t.Setenv("TEST_MODEL", "anthropic/claude-test")
 
 	yaml := `
-api:
-  anthropic_api_key: "${TEST_API_KEY}"
-  timeout: 30
+models:
+  default: "${TEST_MODEL}"
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -38,8 +35,7 @@ api:
 
 	cfg, err := FromYAMLFile(path)
 	require.NoError(t, err)
-	require.Equal(t, "sk-test-123", cfg.API.AnthropicAPIKey)
-	require.Equal(t, 30, cfg.API.Timeout)
+	require.Equal(t, "anthropic/claude-test", cfg.Models.Default)
 }
 
 func TestFromYAMLFile_MissingFile_ReturnsError(t *testing.T) {
@@ -49,8 +45,8 @@ func TestFromYAMLFile_MissingFile_ReturnsError(t *testing.T) {
 
 func TestFromYAMLFile_UnexpandedVar_KeepsLiteral(t *testing.T) {
 	yaml := `
-api:
-  anthropic_api_key: "${UNSET_VAR_XYZ}"
+models:
+  default: "${UNSET_VAR_XYZ}"
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -60,7 +56,7 @@ api:
 	cfg, err := FromYAMLFile(path)
 	require.NoError(t, err)
 	// Unset var: expansion returns empty string (os.Getenv returns "")
-	require.Equal(t, "", cfg.API.AnthropicAPIKey)
+	require.Equal(t, "", cfg.Models.Default)
 }
 
 func TestToYAMLFile_RoundTrip(t *testing.T) {

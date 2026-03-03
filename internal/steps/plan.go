@@ -60,7 +60,7 @@ func feedbackStep(planDir string) tui.WorkflowStep {
 				},
 				Config: cfg,
 				CWD:    cwd,
-				Model:  "claude-sonnet-4-6",
+				Model:  cfg.Models.Tiers.Medium,
 			}, nil
 		},
 	}
@@ -112,7 +112,7 @@ func planStep(specFile, planDir string) tui.WorkflowStep {
 				},
 				Config: cfg,
 				CWD:    cwd,
-				Model:  "claude-opus-4-6",
+				Model:  cfg.Models.Tiers.Complex,
 			}, nil
 		},
 	}

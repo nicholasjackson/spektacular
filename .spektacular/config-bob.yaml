@@ -2,7 +2,7 @@ agent:
   command: bob
   args: ["--output-format", "stream-json"]
   allowed_tools: []
-  disallowed_tools: ["ask_followup_question"]
+  disallowed_tools: []
   dangerously_skip_permissions: false
 complexity:
   thresholds:

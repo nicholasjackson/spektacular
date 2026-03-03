@@ -6,7 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	// Register the Claude runner so it's available via runner.NewRunner().
+	// Register runners so they're available via runner.NewRunner().
+	_ "github.com/jumppad-labs/spektacular/internal/runner/bob"
 	_ "github.com/jumppad-labs/spektacular/internal/runner/claude"
 )
 
