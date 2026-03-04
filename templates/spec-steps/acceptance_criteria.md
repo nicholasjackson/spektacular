@@ -15,5 +15,5 @@ Write all criteria to the Acceptance Criteria section as a checklist.
 
 Spec file location: {{spec_path}}
 
-{{#next_step}}Once complete, call: spektacular spec --step {{next_step}}{{/next_step}}
+{{#next_step}}Once complete, call: spektacular spec --next{{/next_step}}
 {{^next_step}}All steps complete! Review the spec file.{{/next_step}}
