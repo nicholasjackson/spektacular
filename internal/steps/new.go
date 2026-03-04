@@ -177,7 +177,7 @@ func SpecCreatorWorkflow(name, projectPath string, cfg config.Config) tui.Workfl
 }
 
 func overviewStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(overviewMsg, specPath), "Overview")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Overview", fmt.Sprintf(overviewMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -198,7 +198,7 @@ func overviewStep(specPath string) tui.WorkflowStep {
 }
 
 func requirementsStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(requirementsMsg, specPath), "Requirements")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Requirements", fmt.Sprintf(requirementsMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -216,7 +216,7 @@ func requirementsStep(specPath string) tui.WorkflowStep {
 }
 
 func acStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(acMsg, specPath), "Acceptance Criteria")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Acceptance Criteria", fmt.Sprintf(acMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -234,7 +234,7 @@ func acStep(specPath string) tui.WorkflowStep {
 }
 
 func constraintsStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(constraintsMsg, specPath), "Constraints")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Constraints", fmt.Sprintf(constraintsMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -252,7 +252,7 @@ func constraintsStep(specPath string) tui.WorkflowStep {
 }
 
 func technicalApproachStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(technicalApproachMsg, specPath), "Technical Approach")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Technical Approach", fmt.Sprintf(technicalApproachMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -270,7 +270,7 @@ func technicalApproachStep(specPath string) tui.WorkflowStep {
 }
 
 func successMetricsStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(successMetricsMsg, specPath), "Success Metrics")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Success Metrics", fmt.Sprintf(successMetricsMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -288,7 +288,7 @@ func successMetricsStep(specPath string) tui.WorkflowStep {
 }
 
 func nonGoalsStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(nonGoalsMsg, specPath), "Non-Goals")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Non-Goals", fmt.Sprintf(nonGoalsMsg, specPath))
 	systemPrompt := spec.LoadAgentSystemPrompt()
 
 	return tui.WorkflowStep{
@@ -306,7 +306,7 @@ func nonGoalsStep(specPath string) tui.WorkflowStep {
 }
 
 func verifyStep(specPath string) tui.WorkflowStep {
-	userPrompt := runner.BuildPromptWithHeader(fmt.Sprintf(verifyMsg, specPath), "Spec Verification")
+	userPrompt := fmt.Sprintf(runner.PromptWithHeader, "Spec Verification", fmt.Sprintf(verifyMsg, specPath))
 	systemPrompt := spec.LoadVerifyAgentSystemPrompt()
 
 	return tui.WorkflowStep{

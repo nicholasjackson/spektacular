@@ -46,7 +46,7 @@ func implementStep(planDir string) tui.WorkflowStep {
 			}
 			return runner.RunOptions{
 				Prompts: runner.Prompts{
-					User:   runner.BuildPromptWithHeader(planContent, "Implementation Plan"),
+					User:   fmt.Sprintf(runner.PromptWithHeader, "Implementation Plan", planContent),
 					System: systemPrompt,
 				},
 				Config: cfg,

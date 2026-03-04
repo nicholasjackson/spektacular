@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/jumppad-labs/spektacular/internal/config"
@@ -123,14 +124,14 @@ func TestDetectQuestions_MultilineMarker(t *testing.T) {
 // buildPrompt tests
 // ---------------------------------------------------------------------------
 
-func TestBuildPrompt_ContainsSpecAndKnowledgeHint(t *testing.T) {
-	prompt := BuildPrompt("my spec")
+func TestPromptWithHeader_ContainsSpecAndKnowledgeHint(t *testing.T) {
+	prompt := fmt.Sprintf(PromptWithHeader, "Specification to Plan", "my spec")
 	require.Contains(t, prompt, "my spec")
 	require.Contains(t, prompt, ".spektacular/knowledge/")
 }
 
-func TestBuildPromptWithHeader_UsesCustomHeader(t *testing.T) {
-	prompt := BuildPromptWithHeader("plan content", "Implementation Plan")
+func TestPromptWithHeader_UsesCustomHeader(t *testing.T) {
+	prompt := fmt.Sprintf(PromptWithHeader, "Implementation Plan", "plan content")
 	require.Contains(t, prompt, "# Implementation Plan")
 	require.Contains(t, prompt, "plan content")
 	require.NotContains(t, prompt, "Specification to Plan")

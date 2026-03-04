@@ -32,4 +32,5 @@ func init() {
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(implementCmd)
 	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(testCmd)
 }

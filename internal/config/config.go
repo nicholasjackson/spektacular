@@ -51,9 +51,8 @@ type DebugConfig struct {
 type AgentConfig struct {
 	Command                    string   `yaml:"command"`
 	Args                       []string `yaml:"args"`
-	AllowedTools               []string `yaml:"allowed_tools"`
-	DisallowedTools            []string `yaml:"disallowed_tools"`
-	DangerouslySkipPermissions bool     `yaml:"dangerously_skip_permissions"`
+	AllowedTools    []string `yaml:"allowed_tools"`
+	DisallowedTools []string `yaml:"disallowed_tools"`
 }
 
 // Config is the top-level Spektacular configuration.
@@ -90,9 +89,8 @@ func NewDefault() Config {
 		Agent: AgentConfig{
 			Command:                    "claude",
 			Args:                       []string{"--output-format", "stream-json", "--verbose"},
-			AllowedTools:               []string{"Task", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
-			DisallowedTools:            []string{"AskUserQuestion"},
-			DangerouslySkipPermissions: false,
+			AllowedTools:    []string{"Task", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch"},
+			DisallowedTools: []string{"AskUserQuestion"},
 		},
 		Debug: DebugConfig{
 			Enabled: false,

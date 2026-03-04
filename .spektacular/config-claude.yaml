@@ -1,8 +1,8 @@
 agent:
   command: claude
-  args: ["--output-format", "stream-json"]
+  args: ["--output-format", "stream-json", "--verbose"]
   allowed_tools: []
-  disallowed_tools: ["AskUserQuestion"]
+  disallowed_tools: []
   dangerously_skip_permissions: false
 complexity:
   thresholds:

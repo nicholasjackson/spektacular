@@ -3,9 +3,9 @@ package claude
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,9 +58,6 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	if len(cfg.Agent.DisallowedTools) > 0 {
 		cmd = append(cmd, "--disallowedTools", strings.Join(cfg.Agent.DisallowedTools, ","))
 	}
-	if cfg.Agent.DangerouslySkipPermissions {
-		cmd = append(cmd, "--dangerously-skip-permissions")
-	}
 	if opts.SessionID != "" {
 		cmd = append(cmd, "--resume", opts.SessionID)
 	}
@@ -74,9 +71,10 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 		}
 	}
 
+	var stderrBuf bytes.Buffer
 	proc := exec.Command(cmd[0], cmd[1:]...) //nolint:gosec
 	proc.Dir = cwd
-	proc.Stderr = io.Discard
+	proc.Stderr = &stderrBuf
 
 	stdout, err := proc.StdoutPipe()
 	if err != nil {
@@ -118,6 +116,13 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	}
 
 	if err := proc.Wait(); err != nil {
+		stderr := strings.TrimSpace(stderrBuf.String())
+		if debugLog != nil && stderr != "" {
+			fmt.Fprintf(debugLog, "\n========== STDERR ==========\n%s\n", stderr)
+		}
+		if stderr != "" {
+			return fmt.Errorf("claude process exited with error: %w\nstderr: %s", err, stderr)
+		}
 		return fmt.Errorf("claude process exited with error: %w", err)
 	}
 	return nil

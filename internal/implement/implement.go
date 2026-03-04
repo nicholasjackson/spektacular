@@ -99,7 +99,7 @@ func RunImplement(
 	if err := runner.RunSteps(r, []runner.Step{
 		{
 			Prompts: runner.Prompts{
-				User:   runner.BuildPromptWithHeader(planContent, "Implementation Plan"),
+				User:   fmt.Sprintf(runner.PromptWithHeader, "Implementation Plan", planContent),
 				System: LoadAgentPrompt(),
 			},
 			LogFile: logFile,

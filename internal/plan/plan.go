@@ -117,7 +117,7 @@ func RunPlan(
 	if err := runner.RunSteps(r, []runner.Step{
 		{
 			Prompts: runner.Prompts{
-				User:   runner.BuildPrompt(string(specContent)),
+				User:   fmt.Sprintf(runner.PromptWithHeader, "Specification to Plan", string(specContent)),
 				System: LoadAgentPrompt(),
 			},
 			LogFile: logFile,

@@ -3,6 +3,7 @@ package bob
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,10 +69,6 @@ func buildCmd(opts runner.RunOptions) []string {
 
 	cmd := []string{cfg.Agent.Command, "-p", prompt, "-m", model}
 
-	if cfg.Agent.DangerouslySkipPermissions {
-		cmd = append(cmd, "-y")
-	}
-
 	cmd = append(cmd, cfg.Agent.Args...)
 
 	if opts.SessionID != "" {
@@ -93,9 +90,10 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 		}
 	}
 
+	var stderrBuf bytes.Buffer
 	proc := exec.Command(cmd[0], cmd[1:]...) //nolint:gosec
 	proc.Dir = cwd
-	proc.Stderr = io.Discard
+	proc.Stderr = &stderrBuf
 
 	stdout, err := proc.StdoutPipe()
 	if err != nil {
@@ -106,14 +104,16 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	}
 
 	var reader io.Reader = stdout
+	var logFile *os.File
 	if opts.LogFile != "" {
 		if mkdirErr := os.MkdirAll(filepath.Dir(opts.LogFile), 0755); mkdirErr == nil {
 			if f, openErr := os.OpenFile(opts.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); openErr == nil {
-				defer f.Close()
+				logFile = f
+				defer logFile.Close()
 				if opts.SessionID == "" {
-					fmt.Fprintf(f, "\n\n========== NEW SESSION: %s ==========\n", time.Now().Format("15:04:05"))
+					fmt.Fprintf(logFile, "\n\n========== NEW SESSION: %s ==========\n", time.Now().Format("15:04:05"))
 				}
-				reader = io.TeeReader(stdout, f)
+				reader = io.TeeReader(stdout, logFile)
 			}
 		}
 	}
@@ -121,6 +121,13 @@ func run(opts runner.RunOptions, events chan<- runner.Event) error {
 	translate(reader, events)
 
 	if err := proc.Wait(); err != nil {
+		stderr := strings.TrimSpace(stderrBuf.String())
+		if logFile != nil && stderr != "" {
+			fmt.Fprintf(logFile, "\n========== STDERR ==========\n%s\n", stderr)
+		}
+		if stderr != "" {
+			return fmt.Errorf("bob process exited with error: %w\nstderr: %s", err, stderr)
+		}
 		return fmt.Errorf("bob process exited with error: %w", err)
 	}
 	return nil
