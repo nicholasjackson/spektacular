@@ -6,9 +6,9 @@ Be specific:
 • Quantitative: 'p99 latency < 200ms', 'error rate < 0.1%'
 • Behavioral: 'users complete the flow without support intervention'
 
-Write their response to the Success Metrics section. If blank, write 'None.'
+Capture their response. If blank, note that no success metrics have been defined.
 
-Spec file location: {{spec_path}}
+Once you are satisfied, move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'
+

@@ -38,7 +38,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading embedded command template: %w", err)
 	}
 
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
 	rendered, err := mustache.Render(string(tmplBytes), map[string]string{"command": cfg.Command})
 	if err != nil {
 		return fmt.Errorf("rendering command template: %w", err)
@@ -67,6 +70,3 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func init() {
-	rootCmd.AddCommand(initCmd)
-}

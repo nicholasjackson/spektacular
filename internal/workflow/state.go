@@ -10,13 +10,13 @@ import (
 )
 
 // State is the persisted progress of a workflow.
+// Name, ArtifactPath and other domain-specific values live in Data.
 type State struct {
-	Name           string    `json:"name"`
-	ArtifactPath   string    `json:"artifact_path"`
-	CurrentStep    string    `json:"current_step"`
-	CompletedSteps []string  `json:"completed_steps"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	CurrentStep    string         `json:"current_step"`
+	CompletedSteps []string       `json:"completed_steps"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Data           map[string]any `json:"data"`
 }
 
 func (s *State) markCompleted(step string) {

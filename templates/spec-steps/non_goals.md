@@ -6,9 +6,9 @@ Examples:
 • 'Mobile support is out of scope (tracked in #456)'
 • 'Internationalisation will be addressed in a follow-up spec'
 
-Write their response to the Non-Goals section. If blank, write 'None.'
+Capture their response. If blank, note that no non-goals have been defined.
 
-Spec file location: {{spec_path}}
+Once you have captured the information from the user move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'
+

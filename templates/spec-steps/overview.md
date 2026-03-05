@@ -5,10 +5,9 @@ Ask the user to describe this feature in 2-3 sentences:
 • What problem does it solve?
 • Who benefits?
 
-Write their response to the Overview section of the spec file.
-Be specific — avoid generic phrases like 'improve the experience'.
+Capture their response. Be specific — avoid generic phrases like 'improve the experience'.
+Ask for clarification if the description is vague or incomplete before moving on.
 
-Spec file location: {{spec_path}}
+Once you are satisfied with the overview, move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'

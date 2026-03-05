@@ -8,10 +8,9 @@ Use active voice:
 
 Each item should be independently verifiable. One behaviour per line.
 
-Format the requirements as a markdown checklist and write them to the Requirements section:
-- [ ] **Title** — description
+Capture the requirements. Ask for clarification on any that are vague, ambiguous, or not independently verifiable before moving on.
 
-Spec file location: {{spec_path}}
+Once you are satisfied with the requirements, move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'
+

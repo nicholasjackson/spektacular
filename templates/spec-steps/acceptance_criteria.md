@@ -1,6 +1,6 @@
 ## Step {{step}}: {{title}}
 
-Read all requirements from the spec file Requirements section.
+Review the requirements captured in the previous step.
 
 For each requirement, ask the user: "What is the pass/fail condition that proves this is done?"
 
@@ -11,9 +11,9 @@ A good criterion:
 
 Example: "When X happens, Y is visible / saved / returned."
 
-Write all criteria to the Acceptance Criteria section as a checklist.
+Capture all criteria. Ask for clarification on any that are subjective or not traceable to a requirement before moving on.
 
-Spec file location: {{spec_path}}
+Once you are satisfied with the acceptance criteria, move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'
+

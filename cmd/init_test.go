@@ -24,7 +24,7 @@ func TestInit_Claude(t *testing.T) {
 	destPath := filepath.Join(dir, ".claude", "commands", "spek", "new.md")
 	got, err := os.ReadFile(destPath)
 	require.NoError(t, err)
-	require.Contains(t, string(got), "spektacular spec --new")
+	require.Contains(t, string(got), "spektacular spec new")
 	require.NotContains(t, string(got), "{{command}}")
 }
 
@@ -44,7 +44,7 @@ func TestInit_Bob(t *testing.T) {
 	destPath := filepath.Join(dir, ".bob", "commands", "spek-new.md")
 	got, err := os.ReadFile(destPath)
 	require.NoError(t, err)
-	require.Contains(t, string(got), "spektacular spec --new")
+	require.Contains(t, string(got), "spektacular spec new")
 	require.NotContains(t, string(got), "{{command}}")
 }
 
@@ -77,7 +77,7 @@ func TestInit_CustomCommand(t *testing.T) {
 	destPath := filepath.Join(dir, ".claude", "commands", "spek", "new.md")
 	got, err := os.ReadFile(destPath)
 	require.NoError(t, err)
-	require.Contains(t, string(got), "go run . spec --new")
+	require.Contains(t, string(got), "go run . spec new")
 	require.NotContains(t, string(got), "{{command}}")
 }
 

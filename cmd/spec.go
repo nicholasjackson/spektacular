@@ -3,285 +3,304 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 
-	"github.com/jumppad-labs/spektacular/internal/config"
+	"github.com/jumppad-labs/spektacular/internal/output"
 	"github.com/jumppad-labs/spektacular/internal/spec"
+	"github.com/jumppad-labs/spektacular/internal/store"
 	"github.com/jumppad-labs/spektacular/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
-// loadConfig loads the project config, falling back to defaults if the file
-// does not exist.
-func loadConfig() config.Config {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return config.NewDefault()
-	}
-	cfg, err := config.FromYAMLFile(filepath.Join(cwd, ".spektacular", "config.yaml"))
-	if err != nil {
-		return config.NewDefault()
-	}
-	return cfg
+var nameRegexp = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
+// Schema types for --schema output.
+type schemaProp struct {
+	Type    string      `json:"type"`
+	Enum    []string    `json:"enum,omitempty"`
+	Pattern string      `json:"pattern,omitempty"`
+	MaxLen  int         `json:"maxLength,omitempty"`
+	Items   *schemaProp `json:"items,omitempty"`
 }
 
-// Result is the JSON output from a spec workflow command.
-type Result struct {
-	Step           string `json:"step"`
-	TotalSteps     int    `json:"total_steps"`
-	CompletedSteps int    `json:"completed_steps,omitempty"`
-	SpecPath       string `json:"spec_path"`
-	SpecName       string `json:"spec_name"`
-	Instruction    string `json:"instruction"`
+type schemaObj struct {
+	Type       string                 `json:"type"`
+	Properties map[string]*schemaProp `json:"properties"`
+	Required   []string               `json:"required,omitempty"`
 }
 
-// StatusResult is the JSON output from --status.
-type StatusResult struct {
-	SpecName       string            `json:"spec_name"`
-	SpecPath       string            `json:"spec_path"`
-	CurrentStep    string            `json:"current_step"`
-	CompletedSteps []string          `json:"completed_steps"`
-	TotalSteps     int               `json:"total_steps"`
-	Progress       string            `json:"progress"`
-	Steps          []StepStatusEntry `json:"steps"`
+type commandSchema struct {
+	Input  *schemaObj `json:"input"`
+	Output *schemaObj `json:"output"`
 }
 
-// StepStatusEntry is one row in the status output.
-type StepStatusEntry struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
+var resultOutputSchema = &schemaObj{
+	Type: "object",
+	Properties: map[string]*schemaProp{
+		"step":        {Type: "string"},
+		"spec_path":   {Type: "string"},
+		"spec_name":   {Type: "string"},
+		"instruction": {Type: "string"},
+	},
 }
 
-func specStatePath() (string, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("getting working directory: %w", err)
-	}
-	return filepath.Join(cwd, ".spektacular", ".state.json"), nil
+var statusOutputSchema = &schemaObj{
+	Type: "object",
+	Properties: map[string]*schemaProp{
+		"spec_name":       {Type: "string"},
+		"spec_path":       {Type: "string"},
+		"current_step":    {Type: "string"},
+		"completed_steps": {Type: "array", Items: &schemaProp{Type: "string"}},
+		"total_steps":     {Type: "integer"},
+		"progress":        {Type: "string"},
+		"steps":           {Type: "array"},
+	},
 }
 
 var specCmd = &cobra.Command{
 	Use:   "spec",
-	Short: "Manage spec workflow (--new, --next, --step, --status)",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		isNew, _ := cmd.Flags().GetBool("new")
-		isNext, _ := cmd.Flags().GetBool("next")
-		stepName, _ := cmd.Flags().GetString("step")
-		isStatus, _ := cmd.Flags().GetBool("status")
-		dataStr, _ := cmd.Flags().GetString("data")
-
-		set := boolCount(isNew, isNext, stepName != "", isStatus)
-		if set != 1 {
-			return fmt.Errorf("exactly one of --new, --next, --step, or --status is required")
-		}
-
-		var result any
-		var err error
-
-		switch {
-		case isNew:
-			result, err = specNew(dataStr)
-		case isNext:
-			result, err = specNext()
-		case stepName != "":
-			result, err = specGoto(stepName)
-		case isStatus:
-			result, err = specStatus()
-		}
-		if err != nil {
-			return err
-		}
-
-		out, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshaling output: %w", err)
-		}
-
-		fmt.Println(string(out))
-		return nil
-	},
+	Short: "Manage spec workflow",
 }
 
-func specNew(dataStr string) (*Result, error) {
-	if dataStr == "" {
-		return nil, fmt.Errorf("--data is required with --new (e.g. --data '{\"name\": \"my-feature\"}')")
+var specNewCmd = &cobra.Command{
+	Use:   "new",
+	Short: "Create a new spec workflow",
+	RunE:  runSpecNew,
+}
+
+var specGotoCmd = &cobra.Command{
+	Use:   "goto",
+	Short: "Jump to a named step",
+	RunE:  runSpecGoto,
+}
+
+var specStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show current workflow progress",
+	RunE:  runSpecStatus,
+}
+
+var specStepsCmd = &cobra.Command{
+	Use:   "steps",
+	Short: "List available workflow step names",
+	RunE:  runSpecSteps,
+}
+
+func stateFilePath(dataDir string) string {
+	return filepath.Join(dataDir, "state.json")
+}
+
+// readStdinIntoWorkflow reads all of stdin and stores it in the workflow data
+// under stdinKey, if stdinKey is non-empty.
+func readStdinIntoWorkflow(cmd *cobra.Command, wf interface{ SetData(string, any) }, stdinKey string) error {
+	if stdinKey == "" {
+		return nil
+	}
+	content, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return fmt.Errorf("reading stdin: %w", err)
+	}
+	wf.SetData(stdinKey, string(content))
+	return nil
+}
+
+func runSpecNew(cmd *cobra.Command, _ []string) error {
+	if schema, _ := cmd.Flags().GetBool("schema"); schema {
+		s := commandSchema{
+			Input: &schemaObj{
+				Type: "object",
+				Properties: map[string]*schemaProp{
+					"name": {Type: "string", Pattern: "^[a-z0-9_-]+$", MaxLen: 64},
+				},
+				Required: []string{"name"},
+			},
+			Output: resultOutputSchema,
+		}
+		return output.Write(cmd.OutOrStdout(), s, "")
 	}
 
+	dataStr, _ := cmd.Flags().GetString("data")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	if dataStr == "" {
+		return fmt.Errorf("--data is required (e.g. --data '{\"name\":\"my-feature\"}')")
+	}
 	var input struct {
 		Name string `json:"name"`
 	}
 	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
-		return nil, fmt.Errorf("parsing data: %w", err)
+		return fmt.Errorf("parsing --data: %w", err)
 	}
-	if input.Name == "" {
-		return nil, fmt.Errorf("\"name\" is required in --data")
+	if input.Name == "" || !nameRegexp.MatchString(input.Name) || len(input.Name) > 64 {
+		return fmt.Errorf("name must match ^[a-z0-9_-]+$ and be at most 64 characters")
 	}
 
-	cwd, err := os.Getwd()
+	dataDir, err := specDataDir()
 	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
+		return err
 	}
-
-	specDir := filepath.Join(cwd, ".spektacular", "specs")
-	if err := os.MkdirAll(specDir, 0755); err != nil {
-		return nil, fmt.Errorf("creating spec directory: %w", err)
-	}
-
-	specPath := filepath.Join(specDir, input.Name+".md")
-
-	if err := spec.RenderScaffold(specPath, input.Name); err != nil {
-		return nil, err
-	}
-
-	sp, err := specStatePath()
+	cfg, err := loadConfig()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// Delete any existing state so we start fresh.
-	os.Remove(sp)
+	statePath := stateFilePath(dataDir)
+	if dryRun {
+		statePath += ".dryrun-tmp"
+	} else {
+		_ = os.Remove(statePath)
+	}
 
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
 	steps := spec.Steps()
-	wf := workflow.New(steps, sp)
-	wf.State().Name = input.Name
-	wf.State().ArtifactPath = specPath
+	wf := workflow.New(steps, statePath, wfCfg, store.NewFileStore(dataDir))
+	wf.SetData("name", input.Name)
 
-	// Advance to the first real step.
+	stdinKey, _ := cmd.Flags().GetString("stdin")
+	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+		return err
+	}
+
+	// Advance through the internal "new" step (creates spec file, no output).
 	if err := wf.Next(); err != nil {
-		return nil, fmt.Errorf("advancing to first step: %w", err)
+		return output.WriteError(cmd.ErrOrStderr(), err)
 	}
 
-	cfg := loadConfig()
-	cur := wf.Current()
-	instruction, err := spec.RenderStep(cur, specPath, wf.NextStepName(), cfg.Command)
-	if err != nil {
-		return nil, err
+	// Advance to "overview" and write the instruction.
+	out := output.New(cmd.OutOrStdout(), globalFields)
+	if err := wf.Next(out); err != nil {
+		return output.WriteError(cmd.ErrOrStderr(), err)
 	}
-
-	return &Result{
-		Step:        cur,
-		TotalSteps:  len(steps),
-		SpecPath:    specPath,
-		SpecName:    input.Name,
-		Instruction: instruction,
-	}, nil
+	return nil
 }
 
-func specNext() (*Result, error) {
-	sp, err := specStatePath()
+func runSpecGoto(cmd *cobra.Command, _ []string) error {
+	if schema, _ := cmd.Flags().GetBool("schema"); schema {
+		s := commandSchema{
+			Input: &schemaObj{
+				Type: "object",
+				Properties: map[string]*schemaProp{
+					"step": {Type: "string", Enum: workflow.New(spec.Steps(), "", workflow.Config{}, nil).StepNames()},
+				},
+				Required: []string{"step"},
+			},
+			Output: resultOutputSchema,
+		}
+		return output.Write(cmd.OutOrStdout(), s, "")
+	}
+
+	dataStr, _ := cmd.Flags().GetString("data")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	if dataStr == "" {
+		return fmt.Errorf("--data is required (e.g. --data '{\"step\":\"requirements\"}')")
+	}
+	var input map[string]any
+	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
+		return fmt.Errorf("parsing --data: %w", err)
+	}
+	stepVal, _ := input["step"].(string)
+	if stepVal == "" {
+		return fmt.Errorf("\"step\" is required in --data")
+	}
+
+	dataDir, err := specDataDir()
 	if err != nil {
-		return nil, err
+		return err
+	}
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
+	steps := spec.Steps()
+	wf := workflow.New(steps, stateFilePath(dataDir), wfCfg, store.NewFileStore(dataDir))
+
+	for k, v := range input {
+		if k != "step" {
+			wf.SetData(k, v)
+		}
+	}
+
+	stdinKey, _ := cmd.Flags().GetString("stdin")
+	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+		return err
+	}
+
+	out := output.New(cmd.OutOrStdout(), globalFields)
+	if err := wf.Goto(stepVal, out); err != nil {
+		return output.WriteError(cmd.ErrOrStderr(), err)
+	}
+	return nil
+}
+
+func runSpecStatus(cmd *cobra.Command, _ []string) error {
+	if schema, _ := cmd.Flags().GetBool("schema"); schema {
+		s := commandSchema{Input: nil, Output: statusOutputSchema}
+		return output.Write(cmd.OutOrStdout(), s, "")
+	}
+
+	dataDir, err := specDataDir()
+	if err != nil {
+		return err
 	}
 
 	steps := spec.Steps()
-	wf := workflow.New(steps, sp)
-
-	if err := wf.Next(); err != nil {
-		return nil, err
-	}
-
+	wf := workflow.New(steps, stateFilePath(dataDir), workflow.Config{}, nil)
 	st := wf.State()
 
-	if wf.IsComplete() {
-		return &Result{
-			Step:           "done",
-			TotalSteps:     len(steps),
-			CompletedSteps: len(st.CompletedSteps),
-			SpecPath:       st.ArtifactPath,
-			SpecName:       st.Name,
-			Instruction:    "All steps complete! Review the spec file at " + st.ArtifactPath,
-		}, nil
+	specName, _ := wf.GetData("name")
+	specPath := filepath.Join(dataDir, spec.SpecFilePath(fmt.Sprintf("%v", specName)))
+
+	stepInfos := wf.StepStatus()
+	entries := make([]spec.StepEntry, len(stepInfos))
+	for i, info := range stepInfos {
+		entries[i] = spec.StepEntry{Name: info.Name, Status: info.Status}
 	}
 
-	cfg := loadConfig()
-	instruction, err := spec.RenderStep(wf.Current(), st.ArtifactPath, wf.NextStepName(), cfg.Command)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Result{
-		Step:           wf.Current(),
-		TotalSteps:     len(steps),
-		CompletedSteps: len(st.CompletedSteps),
-		SpecPath:       st.ArtifactPath,
-		SpecName:       st.Name,
-		Instruction:    instruction,
-	}, nil
-}
-
-func specGoto(stepName string) (*Result, error) {
-	sp, err := specStatePath()
-	if err != nil {
-		return nil, err
-	}
-
-	steps := spec.Steps()
-	wf := workflow.New(steps, sp)
-
-	if err := wf.Goto(stepName); err != nil {
-		return nil, err
-	}
-
-	cfg := loadConfig()
-	st := wf.State()
-	instruction, err := spec.RenderStep(wf.Current(), st.ArtifactPath, wf.NextStepName(), cfg.Command)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Result{
-		Step:           wf.Current(),
-		TotalSteps:     len(steps),
-		CompletedSteps: len(st.CompletedSteps),
-		SpecPath:       st.ArtifactPath,
-		SpecName:       st.Name,
-		Instruction:    instruction,
-	}, nil
-}
-
-func specStatus() (*StatusResult, error) {
-	sp, err := specStatePath()
-	if err != nil {
-		return nil, err
-	}
-
-	steps := spec.Steps()
-	wf := workflow.New(steps, sp)
-
-	st := wf.State()
-	infos := wf.StepStatus()
-
-	entries := make([]StepStatusEntry, len(infos))
-	for i, info := range infos {
-		entries[i] = StepStatusEntry{Name: info.Name, Status: info.Status}
-	}
-
-	return &StatusResult{
-		SpecName:       st.Name,
-		SpecPath:       st.ArtifactPath,
-		CurrentStep:    st.CurrentStep,
+	out := output.New(cmd.OutOrStdout(), globalFields)
+	return out.WriteResult(spec.StatusResult{
+		SpecName:       fmt.Sprintf("%v", specName),
+		SpecPath:       specPath,
+		CurrentStep:    wf.Current(),
 		CompletedSteps: st.CompletedSteps,
 		TotalSteps:     len(steps),
 		Progress:       fmt.Sprintf("%d/%d", len(st.CompletedSteps), len(steps)),
 		Steps:          entries,
-	}, nil
+	})
 }
 
-func boolCount(flags ...bool) int {
-	n := 0
-	for _, f := range flags {
-		if f {
-			n++
+func runSpecSteps(cmd *cobra.Command, _ []string) error {
+	if schema, _ := cmd.Flags().GetBool("schema"); schema {
+		s := commandSchema{
+			Input: nil,
+			Output: &schemaObj{
+				Type: "object",
+				Properties: map[string]*schemaProp{
+					"steps": {Type: "array", Items: &schemaProp{Type: "string"}},
+				},
+			},
 		}
+		return output.Write(cmd.OutOrStdout(), s, "")
 	}
-	return n
+
+	wf := workflow.New(spec.Steps(), "", workflow.Config{}, nil)
+	out := output.New(cmd.OutOrStdout(), globalFields)
+	return out.WriteResult(spec.StepsResult{Steps: wf.StepNames()})
 }
 
 func init() {
-	specCmd.Flags().Bool("new", false, "Create a new spec workflow")
-	specCmd.Flags().Bool("next", false, "Advance to the next step")
-	specCmd.Flags().StringP("step", "s", "", "Jump to a specific step (for revision)")
-	specCmd.Flags().Bool("status", false, "Show current workflow progress")
-	specCmd.Flags().StringP("data", "d", "", "JSON data for the step")
+	specCmd.PersistentFlags().Bool("schema", false, "Print the input/output schema for this subcommand and exit")
+	specCmd.PersistentFlags().BoolP("dry-run", "n", false, "Validate and preview without writing any files or persisting state")
+
+	specNewCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"name":"my-feature"}')`)
+	specNewCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+	specGotoCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"step":"requirements"}')`)
+	specGotoCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+
+	specCmd.AddCommand(specNewCmd, specGotoCmd, specStatusCmd, specStepsCmd)
 }

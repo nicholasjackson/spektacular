@@ -12,9 +12,9 @@ If no spec name was provided, ask the user for one before proceeding.
 Start the spec workflow by running:
 
 ```
-go run . spec --new --data '{"name": "<spec_name>"}'
+go run . spec new --data '{"name": "<spec_name>"}'
 ```
 
 The command creates the spec file and state file automatically, then returns JSON with an `instruction` field. Follow that instruction exactly.
 
-Each instruction tells you to call `go run . spec --next` (with `--data` if needed) when the step is complete.
+Each instruction tells you to call `go run . spec goto --data '{"step":""}'` when the step is complete.

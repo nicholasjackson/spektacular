@@ -6,8 +6,26 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jumppad-labs/spektacular/internal/store"
 	"github.com/looplab/fsm"
 )
+
+// Config holds runtime configuration for a workflow. It is not persisted.
+type Config struct {
+	Command string
+	DryRun  bool
+}
+
+// ResultWriter is implemented by the output writer and passed into step callbacks.
+type ResultWriter interface {
+	WriteResult(v any) error
+}
+
+// StepCallback is the function signature for step callbacks.
+// Steps receive the data store, output writer, project store, and workflow config.
+// Workflow internals (next step name, totals, etc.) are injected into data as
+// transient overlay values before each call.
+type StepCallback func(data Data, out ResultWriter, st store.Store, cfg Config) error
 
 // StepConfig defines a single step in a workflow.
 // Name is the event name (and step identifier).
@@ -16,7 +34,7 @@ type StepConfig struct {
 	Name     string
 	Src      []string
 	Dst      string
-	Callback fsm.Callback
+	Callback StepCallback
 }
 
 // Workflow is a linear state machine with persistence.
@@ -24,38 +42,22 @@ type Workflow struct {
 	FSM       *fsm.FSM
 	steps     []StepConfig
 	state     *State
+	data      *mapData
 	statePath string
+	cfg       Config
+	store     store.Store
 }
 
 // New builds a workflow FSM from step configs.
 // If a state file exists at statePath, its CurrentStep is used as the initial
 // FSM state. Otherwise the initial state defaults to steps[0].Src[0].
 // An implicit "done" transition is appended after the last step.
-// State is automatically persisted on every transition.
-func New(steps []StepConfig, statePath string) *Workflow {
+// State is automatically persisted on every transition unless cfg.DryRun is true.
+// st is the project store passed to every step callback; it may be nil for
+// workflows that do not perform storage operations.
+func New(steps []StepConfig, statePath string, cfg Config, st store.Store) *Workflow {
 	events := make([]fsm.EventDesc, 0, len(steps)+1)
 	callbacks := make(fsm.Callbacks)
-
-	for _, s := range steps {
-		events = append(events, fsm.EventDesc{
-			Name: s.Name,
-			Src:  s.Src,
-			Dst:  s.Dst,
-		})
-		if s.Callback != nil {
-			callbacks["after_"+s.Name] = s.Callback
-		}
-	}
-
-	// Implicit final transition to "done".
-	if len(steps) > 0 {
-		last := steps[len(steps)-1]
-		events = append(events, fsm.EventDesc{
-			Name: "done",
-			Src:  []string{last.Dst},
-			Dst:  "done",
-		})
-	}
 
 	// Load existing state or create new.
 	var state *State
@@ -77,7 +79,42 @@ func New(steps []StepConfig, statePath string) *Workflow {
 	w := &Workflow{
 		steps:     steps,
 		state:     state,
+		data:      newMapData(state.Data),
 		statePath: statePath,
+		cfg:       cfg,
+		store:     st,
+	}
+	// Keep state.Data pointing at the same underlying map so saves include step writes.
+	w.state.Data = w.data.base
+
+	for _, s := range steps {
+		events = append(events, fsm.EventDesc{
+			Name: s.Name,
+			Src:  s.Src,
+			Dst:  s.Dst,
+		})
+		if s.Callback != nil {
+			step := s // capture
+			callbacks["after_"+s.Name] = func(_ context.Context, e *fsm.Event) {
+				var out ResultWriter
+				if len(e.Args) > 0 && e.Args[0] != nil {
+					out, _ = e.Args[0].(ResultWriter)
+				}
+				if err := step.Callback(w.data, out, w.store, w.cfg); err != nil {
+					e.Cancel(err)
+				}
+			}
+		}
+	}
+
+	// Implicit final transition to "done".
+	if len(steps) > 0 {
+		last := steps[len(steps)-1]
+		events = append(events, fsm.EventDesc{
+			Name: "done",
+			Src:  []string{last.Dst},
+			Dst:  "done",
+		})
 	}
 
 	// Auto-update and persist state on every transition.
@@ -87,25 +124,31 @@ func New(steps []StepConfig, statePath string) *Workflow {
 		}
 		w.state.CurrentStep = e.Dst
 		w.state.UpdatedAt = time.Now().UTC()
-		_ = saveState(w.statePath, w.state)
+		if !cfg.DryRun {
+			_ = saveState(w.statePath, w.state)
+		}
 	}
 
 	w.FSM = fsm.NewFSM(initialState, events, callbacks)
 	return w
 }
 
-// Next fires the first available transition.
-func (w *Workflow) Next() error {
+// Next fires the first available transition, optionally passing a ResultWriter.
+func (w *Workflow) Next(out ...ResultWriter) error {
 	transitions := w.FSM.AvailableTransitions()
 	if len(transitions) == 0 {
 		return fmt.Errorf("workflow is already complete")
 	}
-	return w.FSM.Event(context.Background(), transitions[0])
+	var writer ResultWriter
+	if len(out) > 0 {
+		writer = out[0]
+	}
+	return w.FSM.Event(context.Background(), transitions[0], writer)
 }
 
 // Goto jumps to a named step by firing the corresponding FSM event.
-// The step's Src list must include the current state.
-func (w *Workflow) Goto(name string) error {
+// The step's Src list must include the current state; otherwise the FSM errors.
+func (w *Workflow) Goto(name string, out ...ResultWriter) error {
 	if w.Current() == name {
 		return nil
 	}
@@ -114,7 +157,29 @@ func (w *Workflow) Goto(name string) error {
 		return fmt.Errorf("unknown step %q", name)
 	}
 
-	return w.FSM.Event(context.Background(), name)
+	var writer ResultWriter
+	if len(out) > 0 {
+		writer = out[0]
+	}
+	return w.FSM.Event(context.Background(), name, writer)
+}
+
+// SetData stores a value in the persistent data store.
+func (w *Workflow) SetData(key string, value any) {
+	w.data.Set(key, value)
+}
+
+// GetData retrieves a value from the data store.
+func (w *Workflow) GetData(key string) (any, bool) {
+	return w.data.Get(key)
+}
+
+// FirstStep returns the name of the first step.
+func (w *Workflow) FirstStep() string {
+	if len(w.steps) > 0 {
+		return w.steps[0].Name
+	}
+	return ""
 }
 
 // Current returns the current state name.

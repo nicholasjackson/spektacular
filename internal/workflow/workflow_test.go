@@ -15,7 +15,7 @@ var testSteps = []StepConfig{
 
 func TestNew(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	require.Equal(t, "new", wf.Current())
 	require.False(t, wf.IsComplete())
@@ -23,7 +23,7 @@ func TestNew(t *testing.T) {
 
 func TestNextAdvancesThroughAllSteps(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	err := wf.Next() // new → one
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestNextAdvancesThroughAllSteps(t *testing.T) {
 
 func TestNextOnCompleteErrors(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	for i := 0; i <= len(testSteps); i++ {
 		err := wf.Next()
@@ -57,7 +57,7 @@ func TestNextOnCompleteErrors(t *testing.T) {
 
 func TestGotoForward(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 
@@ -68,7 +68,7 @@ func TestGotoForward(t *testing.T) {
 
 func TestGotoSameStepIsNoop(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 
@@ -79,7 +79,7 @@ func TestGotoSameStepIsNoop(t *testing.T) {
 
 func TestGotoInvalidStepFails(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	err := wf.Goto("nonexistent")
 	require.Error(t, err)
@@ -87,20 +87,20 @@ func TestGotoInvalidStepFails(t *testing.T) {
 
 func TestAutoSaveOnTransition(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 	wf.Next() // → two
 
 	// Rebuild from persisted state (auto-saved by enter_state).
-	loaded := New(testSteps, sp)
+	loaded := New(testSteps, sp, Config{}, nil)
 	require.Equal(t, "two", loaded.Current())
 	require.Equal(t, []string{"one"}, loaded.State().CompletedSteps)
 }
 
 func TestStepStatus(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 	wf.Next() // → two
@@ -114,7 +114,7 @@ func TestStepStatus(t *testing.T) {
 
 func TestGotoBackwardFails(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 	wf.Next() // → two
@@ -126,7 +126,7 @@ func TestGotoBackwardFails(t *testing.T) {
 
 func TestNextStepName(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 	require.Equal(t, "two", wf.NextStepName())
@@ -140,7 +140,7 @@ func TestNextStepName(t *testing.T) {
 
 func TestCompletedStepsTracked(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
-	wf := New(testSteps, sp)
+	wf := New(testSteps, sp, Config{}, nil)
 
 	wf.Next() // → one
 	wf.Next() // → two

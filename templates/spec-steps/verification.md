@@ -1,17 +1,21 @@
 ## Step {{step}}: {{title}}
 
-Read the spec file in full.
+Complete the following template with all of the information you have gathered so far
 
-Validate every section (Overview, Requirements, Acceptance Criteria, Constraints, Technical Approach, Success Metrics, Non-Goals) for:
+```markdown
+{{spec_template}}
+```
+
+Review all the information gathered across every step and validate the complete spec for:
 • Completeness — all sections are filled
 • Clarity — requirements are specific and testable
 • Consistency — sections reference each other appropriately
 
-Report any issues found. If there are gaps or unclear sections, ask the user for clarification.
+Report any issues to the user and ask for clarification until you are confident the spec is correct and complete.
 
-Once all sections are validated and complete, confirm the spec is ready.
+Once the user is happy, produce the final complete spec and pipe it to the following command:
 
-Spec file location: {{spec_path}}
+cat <<'EOF' | {{config.command}} spec goto --data '{"step":"{{next_step}}"}' --stdin spec_template
+<complete filled spec here>
+EOF
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}

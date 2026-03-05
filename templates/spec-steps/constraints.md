@@ -7,9 +7,9 @@ Examples:
 • Cannot introduce breaking changes to the public API
 • Must support the current minimum supported runtime versions
 
-Write their response to the Constraints section. If blank, write 'None.'
+Capture their response. If blank, note that there are no constraints.
 
-Spec file location: {{spec_path}}
+Once you are satisfied, move to the next step by running the command:
 
-{{#next_step}}Once complete, call: {{command}} spec --next{{/next_step}}
-{{^next_step}}All steps complete! Review the spec file.{{/next_step}}
+{{config.command}} spec goto --data '{"step":"{{next_step}}"}'
+
