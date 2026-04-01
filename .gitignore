@@ -46,3 +46,8 @@ vendor/
 # Temporary files
 *.tmp
 *.log
+
+# Harbor test results
+tests/harbor/jobs/
+tests/harbor/*/environment/spektacular
+jobs/
