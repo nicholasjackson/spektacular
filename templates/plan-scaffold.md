@@ -1,104 +1,142 @@
 # Plan: {{name}}
 
-<!-- Metadata: filled in during verification step -->
+<!-- Metadata -->
 <!-- Created: -->
 <!-- Commit: -->
 <!-- Branch: -->
 <!-- Repository: -->
 
+<!--
+  OVERVIEW
+  A concise 2-3 sentence summary of the plan. Answer:
+    1. What is being built?
+    2. What problem does it solve?
+    3. Who benefits?
+  No file paths, no commands, no implementation detail. A reviewer should be
+  able to decide whether the plan is worth reading in full from this section
+  alone.
+-->
 ## Overview
 
-<!-- Pre-filled from earlier steps. A concise summary of what we're building and why. -->
 
 
-## Current State Analysis
-
-<!-- What exists today? What's the starting point? -->
-
-
-## Desired End State
-
-<!-- What does the world look like when this plan is complete? -->
-
-
-## Key Discoveries
-
-<!-- Important findings from the discovery/research phase. Include file:line references. -->
+<!--
+  ARCHITECTURE & DESIGN DECISIONS
+  The chosen design direction in 2-4 short paragraphs. Explain the shape of
+  the solution, the key decisions and their trade-offs, and why the chosen
+  direction beats the alternatives. Cross-reference
+  research.md#alternatives-considered-and-rejected so readers can drill into
+  the evidence for rejected options. This is plan.md's load-bearing section —
+  a reviewer should be able to spot missing architectural patterns or design
+  gaps from this section without needing to read context.md.
+-->
+## Architecture & Design Decisions
 
 
-## What We're NOT Doing
 
-<!-- Explicit out-of-scope items agreed during the approach step. -->
-
-
-## Implementation Approach
-
-<!-- The chosen design direction and rationale. -->
-
-
-## Project References
-
-<!-- Reference docs used during planning. -->
-- `thoughts/notes/commands.md` — Project commands
-- `thoughts/notes/testing.md` — Testing patterns
+<!--
+  COMPONENT BREAKDOWN
+  The components (new or changed) that make up the solution, with their
+  responsibilities and how they interact. One bullet or short paragraph per
+  component. Name the component, state what it owns, and describe its
+  relationship to the other components. Do not list file paths or line
+  numbers here — component responsibilities, not implementation sites.
+-->
+## Component Breakdown
 
 
-## Token Management Strategy
 
-<!-- Complexity tier and agent orchestration approach. -->
-
-| Tier | Token Budget | Agent Strategy |
-|------|-------------|----------------|
-| Low | ~10k | Single agent, sequential |
-| Medium | ~25k | 2-3 parallel agents |
-| High | ~50k+ | Parallel analysis, sequential integration |
-
-
-## Milestones
-
-<!-- 2-4 milestones with user-facing goals and testable outcomes. -->
-
-### Milestone 1: <title>
-
-**Goal**: <user-facing goal>
-**Validation**: <how to confirm completion>
-
-#### Phase 1.1: <title>
-
-- **Complexity**: Low / Medium / High
-- **Token estimate**: ~Nk
-- **Agent strategy**: <approach>
-
-**Changes Required**:
-- `<file:line>` — <description of change>
-
-**Success Criteria**:
-- Automated:
-  - `<command>` — <what it verifies>
-- Manual:
-  - <verification step>
+<!--
+  DATA STRUCTURES & INTERFACES
+  The types, interface signatures, and serialization boundaries introduced or
+  changed by the plan. Show type shapes in pseudocode or a short code block
+  where useful. Focus on the contract between components, not internal
+  representation detail.
+-->
+## Data Structures & Interfaces
 
 
-## Testing Strategy
 
-<!-- How testing is approached across the plan. -->
-
-
-## Performance Considerations
-
-<!-- Any performance implications or requirements. Leave blank if N/A. -->
-
-
-## Migration Notes
-
-<!-- Any migration steps needed. Leave blank if N/A. -->
+<!--
+  IMPLEMENTATION DETAIL
+  High-level only. Sketch new patterns being introduced, major code-shape
+  changes, and code-structure UX — enough for a reviewer to spot missing
+  patterns or design gaps. This is NOT per-phase file:line work — that
+  belongs in context.md. If you find yourself writing "in file X at line Y",
+  stop and move it to context.md.
+-->
+## Implementation Detail
 
 
-## References
 
-<!-- Links to specs, issues, PRs, or external resources. -->
+<!--
+  DEPENDENCIES
+  The internal packages, external libraries, upstream specs, or prior plans
+  this work depends on. One bullet per dependency with a one-line note on
+  what it provides and whether it needs any changes.
+-->
+## Dependencies
 
 
-## Changelog
 
-<!-- Left empty — filled during implementation by the implement workflow. -->
+<!--
+  TESTING APPROACH
+  High-level overview of the testing strategy: what kinds of tests
+  (unit, integration, contract, regression), which components get the most
+  coverage, and what the load-bearing assertions are. Per-phase testing
+  detail — which specific tests live in which specific files — stays in
+  context.md.
+-->
+## Testing Approach
+
+
+
+<!--
+  MILESTONES & PHASES
+  2-4 milestones. Each milestone leads with a "What changes" summary
+  paragraph describing the user-visible difference when the milestone lands.
+  Each phase has a 2-4 sentence plain-language summary, a *Technical detail:*
+  link to context.md, and an **Acceptance criteria**: checkbox list with
+  outcome statements (not shell commands). No file:line references in
+  plan.md phase content — those live in context.md.
+-->
+## Milestones & Phases
+
+### Milestone 1: <user-facing title>
+
+**What changes**: <one-paragraph description of the user-visible difference when this milestone lands. Written in plain language, no file paths, no commands.>
+
+#### - [ ] Phase 1.1: <short title>
+
+<2-4 sentence summary of what this phase does and why. Plain language. No file:line references. No shell commands.>
+
+*Technical detail:* [context.md#phase-11](./context.md#phase-11-<slug>)
+
+**Acceptance criteria**:
+
+- [ ] <outcome statement in plain language>
+- [ ] <outcome statement in plain language>
+
+
+<!--
+  OPEN QUESTIONS
+  Strictly for questions that genuinely cannot be resolved until
+  implementation begins. Anything resolvable by asking the user, reading the
+  code, or running a quick experiment must be resolved now — not parked
+  here. If this section is empty, that is the expected outcome of a healthy
+  planning pass.
+-->
+## Open Questions
+
+
+
+<!--
+  OUT OF SCOPE
+  Explicit exclusions agreed during planning. Each bullet states what is NOT
+  being done and, where useful, where it is tracked instead. This is as
+  important as the requirements — it prevents scope creep and sets clear
+  expectations for reviewers.
+-->
+## Out of Scope
+
+

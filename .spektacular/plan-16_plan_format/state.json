@@ -1,0 +1,17 @@
+{
+  "current_step": "finished",
+  "completed_steps": [
+    "new",
+    "overview",
+    "discovery",
+    "approach",
+    "milestones",
+    "phases",
+    "verification"
+  ],
+  "created_at": "2026-04-13T10:24:41.000281321Z",
+  "updated_at": "2026-04-13T10:36:56.100472562Z",
+  "data": {
+    "name": "16_plan_format"
+  }
+}

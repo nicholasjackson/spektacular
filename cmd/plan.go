@@ -85,8 +85,7 @@ func runPlanNew(cmd *cobra.Command, _ []string) error {
 			Input: &schemaObj{
 				Type: "object",
 				Properties: map[string]*schemaProp{
-					"name":     {Type: "string", Pattern: "^[a-z0-9_-]+$", MaxLen: 64},
-					"overview": {Type: "string"},
+					"name": {Type: "string", Pattern: "^[a-z0-9_-]+$", MaxLen: 64},
 				},
 				Required: []string{"name"},
 			},
@@ -102,8 +101,7 @@ func runPlanNew(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("--data is required (e.g. --data '{\"name\":\"my-feature\"}')")
 	}
 	var input struct {
-		Name     string `json:"name"`
-		Overview string `json:"overview"`
+		Name string `json:"name"`
 	}
 	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
 		return fmt.Errorf("parsing --data: %w", err)
@@ -137,9 +135,6 @@ func runPlanNew(cmd *cobra.Command, _ []string) error {
 	out := output.New(cmd.OutOrStdout(), globalFields)
 	wf := workflow.New(steps, statePath, wfCfg, store.NewFileStore(filepath.Join(dataDir, "..")), out)
 	wf.SetData("name", input.Name)
-	if input.Overview != "" {
-		wf.SetData("overview", input.Overview)
-	}
 
 	stdinKey, _ := cmd.Flags().GetString("stdin")
 	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
@@ -235,7 +230,7 @@ func runPlanStatus(cmd *cobra.Command, _ []string) error {
 	wf := workflow.New(steps, planStateFilePath(dataDir), workflow.Config{}, nil, nil)
 	st := wf.State()
 
-	planPath := filepath.Join(filepath.Dir(dataDir), "plans", planName+".md")
+	planPath := filepath.Join(filepath.Dir(dataDir), plan.PlanFilePath(planName))
 
 	stepInfos := wf.StepStatus()
 	entries := make([]plan.StepEntry, len(stepInfos))
