@@ -2,13 +2,10 @@ package plan
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
-	"github.com/cbroglie/mustache"
+	"github.com/jumppad-labs/spektacular/internal/stepkit"
 	"github.com/jumppad-labs/spektacular/internal/store"
 	"github.com/jumppad-labs/spektacular/internal/workflow"
-	"github.com/jumppad-labs/spektacular/templates"
 )
 
 // PlanFilePath returns the store-relative path for a plan file.
@@ -50,6 +47,32 @@ func Steps() []workflow.StepConfig {
 	}
 }
 
+// buildResult is the stepkit.ResultBuilder for the plan workflow.
+func buildResult(stepName, instanceName, primaryPath, instruction string) any {
+	return Result{
+		Step:        stepName,
+		PlanPath:    primaryPath,
+		PlanName:    instanceName,
+		Instruction: instruction,
+	}
+}
+
+// writeStep is a one-liner wrapper around stepkit.WriteStepResult with the
+// plan strategy and result builder pre-applied. Step callbacks below call it.
+func writeStep(stepName, nextStep, templatePath string, data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config, extra map[string]any) error {
+	return stepkit.WriteStepResult(
+		stepkit.StepRequest{
+			StepName:     stepName,
+			NextStep:     nextStep,
+			TemplatePath: templatePath,
+			Strategy:     strategy{},
+			Extra:        extra,
+		},
+		data, out, st, cfg,
+		buildResult,
+	)
+}
+
 // new initializes state only — no document created yet.
 func new() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
@@ -59,228 +82,161 @@ func new() workflow.StepCallback {
 
 func overview() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("overview", "discovery", "steps/plan/01-overview.md", data, out, st, cfg)
+		return "", writeStep("overview", "discovery", "steps/plan/01-overview.md", data, out, st, cfg, nil)
 	}
 }
 
 func discovery() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("discovery", "architecture", "steps/plan/02-discovery.md", data, out, st, cfg)
+		return "", writeStep("discovery", "architecture", "steps/plan/02-discovery.md", data, out, st, cfg, nil)
 	}
 }
 
 func architecture() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("architecture", "components", "steps/plan/03-architecture.md", data, out, st, cfg)
+		return "", writeStep("architecture", "components", "steps/plan/03-architecture.md", data, out, st, cfg, nil)
 	}
 }
 
 func components() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("components", "data_structures", "steps/plan/04-components.md", data, out, st, cfg)
+		return "", writeStep("components", "data_structures", "steps/plan/04-components.md", data, out, st, cfg, nil)
 	}
 }
 
 func dataStructures() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("data_structures", "implementation_detail", "steps/plan/05-data_structures.md", data, out, st, cfg)
+		return "", writeStep("data_structures", "implementation_detail", "steps/plan/05-data_structures.md", data, out, st, cfg, nil)
 	}
 }
 
 func implementationDetail() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("implementation_detail", "dependencies", "steps/plan/06-implementation_detail.md", data, out, st, cfg)
+		return "", writeStep("implementation_detail", "dependencies", "steps/plan/06-implementation_detail.md", data, out, st, cfg, nil)
 	}
 }
 
 func dependencies() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("dependencies", "testing_approach", "steps/plan/07-dependencies.md", data, out, st, cfg)
+		return "", writeStep("dependencies", "testing_approach", "steps/plan/07-dependencies.md", data, out, st, cfg, nil)
 	}
 }
 
 func testingApproach() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("testing_approach", "milestones", "steps/plan/08-testing_approach.md", data, out, st, cfg)
+		return "", writeStep("testing_approach", "milestones", "steps/plan/08-testing_approach.md", data, out, st, cfg, nil)
 	}
 }
 
 func milestones() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("milestones", "phases", "steps/plan/09-milestones.md", data, out, st, cfg)
+		return "", writeStep("milestones", "phases", "steps/plan/09-milestones.md", data, out, st, cfg, nil)
 	}
 }
 
 func phases() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("phases", "open_questions", "steps/plan/10-phases.md", data, out, st, cfg)
+		return "", writeStep("phases", "open_questions", "steps/plan/10-phases.md", data, out, st, cfg, nil)
 	}
 }
 
 func openQuestions() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("open_questions", "out_of_scope", "steps/plan/11-open_questions.md", data, out, st, cfg)
+		return "", writeStep("open_questions", "out_of_scope", "steps/plan/11-open_questions.md", data, out, st, cfg, nil)
 	}
 }
 
 func outOfScope() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("out_of_scope", "verification", "steps/plan/12-out_of_scope.md", data, out, st, cfg)
+		return "", writeStep("out_of_scope", "verification", "steps/plan/12-out_of_scope.md", data, out, st, cfg, nil)
 	}
 }
 
 func verification() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		planName := getString(data, "name")
-		planScaffold, err := renderTemplate("scaffold/plan.md", map[string]any{"name": planName})
+		planName := stepkit.GetString(data, "name")
+		planScaffold, err := stepkit.RenderTemplate("scaffold/plan.md", map[string]any{"name": planName})
 		if err != nil {
 			return "", err
 		}
-		contextScaffold, err := renderTemplate("scaffold/context.md", map[string]any{"name": planName})
+		contextScaffold, err := stepkit.RenderTemplate("scaffold/context.md", map[string]any{"name": planName})
 		if err != nil {
 			return "", err
 		}
-		researchScaffold, err := renderTemplate("scaffold/research.md", map[string]any{"name": planName})
+		researchScaffold, err := stepkit.RenderTemplate("scaffold/research.md", map[string]any{"name": planName})
 		if err != nil {
 			return "", err
 		}
-		return "", writeStepResult("verification", "finished", "steps/plan/13-verification.md", data, out, st, cfg,
-			map[string]any{
-				"plan_template":     planScaffold,
-				"context_template":  contextScaffold,
-				"research_template": researchScaffold,
-			})
+		return "", writeStep("verification", "write_plan", "steps/plan/13-verification.md", data, out, st, cfg, map[string]any{
+			"plan_template":     planScaffold,
+			"context_template":  contextScaffold,
+			"research_template": researchScaffold,
+		})
 	}
 }
 
 // writePlan writes plan.md from the plan_template data key.
 func writePlan() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		planName := getString(data, "name")
-		content := getString(data, "plan_template")
+		planName := stepkit.GetString(data, "name")
+		content := stepkit.GetString(data, "plan_template")
 		if content == "" {
-			return "", fmt.Errorf("plan_template missing — pipe the filled plan.md via --stdin plan_template")
+			return "", fmt.Errorf("plan_template missing — submit the filled plan.md via --file or --stdin plan_template")
 		}
 		if !cfg.DryRun {
 			if err := st.Write(PlanFilePath(planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
-		return "", writeStepResult("write_plan", "write_context", "steps/plan/14-write_plan.md", data, out, st, cfg)
+		return "", writeStep("write_plan", "write_context", "steps/plan/14-write_plan.md", data, out, st, cfg, nil)
 	}
 }
 
 // writeContext writes context.md from the context_template data key.
 func writeContext() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		planName := getString(data, "name")
-		content := getString(data, "context_template")
+		planName := stepkit.GetString(data, "name")
+		content := stepkit.GetString(data, "context_template")
 		if content == "" {
-			return "", fmt.Errorf("context_template missing — pipe the filled context.md via --stdin context_template")
+			return "", fmt.Errorf("context_template missing — submit the filled context.md via --file or --stdin context_template")
 		}
 		if !cfg.DryRun {
 			if err := st.Write(ContextFilePath(planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
-		return "", writeStepResult("write_context", "write_research", "steps/plan/15-write_context.md", data, out, st, cfg)
+		return "", writeStep("write_context", "write_research", "steps/plan/15-write_context.md", data, out, st, cfg, nil)
 	}
 }
 
 // writeResearch writes research.md from the research_template data key.
 func writeResearch() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		planName := getString(data, "name")
-		content := getString(data, "research_template")
+		planName := stepkit.GetString(data, "name")
+		content := stepkit.GetString(data, "research_template")
 		if content == "" {
-			return "", fmt.Errorf("research_template missing — pipe the filled research.md via --stdin research_template")
+			return "", fmt.Errorf("research_template missing — submit the filled research.md via --file or --stdin research_template")
 		}
 		if !cfg.DryRun {
 			if err := st.Write(ResearchFilePath(planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
-		return "", writeStepResult("write_research", "finished", "steps/plan/16-write_research.md", data, out, st, cfg)
+		return "", writeStep("write_research", "finished", "steps/plan/16-write_research.md", data, out, st, cfg, nil)
 	}
 }
 
 func finished() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
 		if cfg.DryRun {
-			return "", writeStepResult("finished", "", "steps/plan/17-finished.md", data, out, st, cfg)
+			return "", writeStep("finished", "", "steps/plan/17-finished.md", data, out, st, cfg, nil)
 		}
-		planName := getString(data, "name")
+		planName := stepkit.GetString(data, "name")
 		for _, p := range []string{PlanFilePath(planName), ContextFilePath(planName), ResearchFilePath(planName)} {
 			if !st.Exists(p) {
 				return "", fmt.Errorf("expected file %s not found — the preceding write step should have written it", p)
 			}
 		}
-		return "", writeStepResult("finished", "", "steps/plan/17-finished.md", data, out, st, cfg)
+		return "", writeStep("finished", "", "steps/plan/17-finished.md", data, out, st, cfg, nil)
 	}
-}
-
-// writeStepResult renders the step template and writes the result to out.
-func writeStepResult(name, nextStep, templatePath string, data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config, extra ...map[string]any) error {
-	planName := getString(data, "name")
-	planPath := filepath.Join(st.Root(), PlanFilePath(planName))
-	contextPath := filepath.Join(st.Root(), ContextFilePath(planName))
-	researchPath := filepath.Join(st.Root(), ResearchFilePath(planName))
-	planDir := filepath.Dir(planPath)
-	specPath := filepath.Join(st.Root(), "specs", planName+".md")
-
-	vars := map[string]any{
-		"step":          name,
-		"title":         stepTitle(name),
-		"plan_path":     planPath,
-		"context_path":  contextPath,
-		"research_path": researchPath,
-		"plan_dir":      planDir,
-		"plan_name":     planName,
-		"spec_path":     specPath,
-		"next_step":     nextStep,
-		"config":        map[string]any{"command": cfg.Command},
-	}
-	for _, m := range extra {
-		for k, v := range m {
-			vars[k] = v
-		}
-	}
-
-	instruction, err := renderTemplate(templatePath, vars)
-	if err != nil {
-		return err
-	}
-	return out.WriteResult(Result{
-		Step:        name,
-		PlanPath:    planPath,
-		PlanName:    planName,
-		Instruction: instruction,
-	})
-}
-
-func getString(data workflow.Data, key string) string {
-	v, ok := data.Get(key)
-	if !ok {
-		return ""
-	}
-	s, _ := v.(string)
-	return s
-}
-
-func renderTemplate(templatePath string, data map[string]any) (string, error) {
-	tmplBytes, err := templates.FS.ReadFile(templatePath)
-	if err != nil {
-		return "", fmt.Errorf("loading template %s: %w", templatePath, err)
-	}
-	return mustache.Render(string(tmplBytes), data)
-}
-
-func stepTitle(name string) string {
-	words := strings.Split(name, "_")
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return strings.Join(words, " ")
 }

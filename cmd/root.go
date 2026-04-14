@@ -56,6 +56,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&globalFields, "fields", "", `JSON array of output fields to include (e.g. '["step","instruction"]')`)
 	rootCmd.AddCommand(specCmd)
 	rootCmd.AddCommand(planCmd)
+	rootCmd.AddCommand(implementCmd)
 	rootCmd.AddCommand(skillCmd)
 	rootCmd.AddCommand(initCmd)
 }

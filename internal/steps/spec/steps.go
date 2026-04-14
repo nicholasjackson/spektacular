@@ -2,13 +2,10 @@ package spec
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
-	"github.com/cbroglie/mustache"
+	"github.com/jumppad-labs/spektacular/internal/stepkit"
 	"github.com/jumppad-labs/spektacular/internal/store"
 	"github.com/jumppad-labs/spektacular/internal/workflow"
-	"github.com/jumppad-labs/spektacular/templates"
 )
 
 // SpecFilePath returns the store-relative path for a spec file.
@@ -35,6 +32,32 @@ func Steps() []workflow.StepConfig {
 	}
 }
 
+// buildResult is the stepkit.ResultBuilder for the spec workflow.
+func buildResult(stepName, instanceName, primaryPath, instruction string) any {
+	return Result{
+		Step:        stepName,
+		SpecPath:    primaryPath,
+		SpecName:    instanceName,
+		Instruction: instruction,
+	}
+}
+
+// writeStep is a thin wrapper around stepkit.WriteStepResult pre-applied with
+// the spec strategy and result builder.
+func writeStep(stepName, nextStep, templatePath string, data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config, extra map[string]any) error {
+	return stepkit.WriteStepResult(
+		stepkit.StepRequest{
+			StepName:     stepName,
+			NextStep:     nextStep,
+			TemplatePath: templatePath,
+			Strategy:     strategy{},
+			Extra:        extra,
+		},
+		data, out, st, cfg,
+		buildResult,
+	)
+}
+
 // new creates the spec file and produces no output.
 // The caller is expected to immediately advance to "overview".
 func new() workflow.StepCallback {
@@ -45,8 +68,8 @@ func new() workflow.StepCallback {
 		if st == nil {
 			return "", fmt.Errorf("store required for new step")
 		}
-		name := getString(data, "name")
-		rendered, err := renderTemplate("scaffold/spec.md", map[string]any{"name": name})
+		name := stepkit.GetString(data, "name")
+		rendered, err := stepkit.RenderTemplate("scaffold/spec.md", map[string]any{"name": name})
 		if err != nil {
 			return "", err
 		}
@@ -59,128 +82,68 @@ func new() workflow.StepCallback {
 
 func overview() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("overview", "requirements", "steps/spec/01-overview.md", data, out, st, cfg)
+		return "", writeStep("overview", "requirements", "steps/spec/01-overview.md", data, out, st, cfg, nil)
 	}
 }
 
 func requirements() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("requirements", "acceptance_criteria", "steps/spec/02-requirements.md", data, out, st, cfg)
+		return "", writeStep("requirements", "acceptance_criteria", "steps/spec/02-requirements.md", data, out, st, cfg, nil)
 	}
 }
 
 func acceptanceCriteria() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("acceptance_criteria", "constraints", "steps/spec/03-acceptance_criteria.md", data, out, st, cfg)
+		return "", writeStep("acceptance_criteria", "constraints", "steps/spec/03-acceptance_criteria.md", data, out, st, cfg, nil)
 	}
 }
 
 func constraints() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("constraints", "technical_approach", "steps/spec/04-constraints.md", data, out, st, cfg)
+		return "", writeStep("constraints", "technical_approach", "steps/spec/04-constraints.md", data, out, st, cfg, nil)
 	}
 }
 
 func technicalApproach() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("technical_approach", "success_metrics", "steps/spec/05-technical_approach.md", data, out, st, cfg)
+		return "", writeStep("technical_approach", "success_metrics", "steps/spec/05-technical_approach.md", data, out, st, cfg, nil)
 	}
 }
 
 func successMetrics() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("success_metrics", "non_goals", "steps/spec/06-success_metrics.md", data, out, st, cfg)
+		return "", writeStep("success_metrics", "non_goals", "steps/spec/06-success_metrics.md", data, out, st, cfg, nil)
 	}
 }
 
 func nonGoals() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		return "", writeStepResult("non_goals", "verification", "steps/spec/07-non_goals.md", data, out, st, cfg)
+		return "", writeStep("non_goals", "verification", "steps/spec/07-non_goals.md", data, out, st, cfg, nil)
 	}
 }
 
 func verification() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		specName := getString(data, "name")
-		scaffold, err := renderTemplate("scaffold/spec.md", map[string]any{"name": specName})
+		specName := stepkit.GetString(data, "name")
+		scaffold, err := stepkit.RenderTemplate("scaffold/spec.md", map[string]any{"name": specName})
 		if err != nil {
 			return "", err
 		}
-		return "", writeStepResult("verification", "finished", "steps/spec/08-verification.md", data, out, st, cfg,
-			map[string]any{"spec_template": scaffold})
+		return "", writeStep("verification", "finished", "steps/spec/08-verification.md", data, out, st, cfg, map[string]any{
+			"spec_template": scaffold,
+		})
 	}
 }
 
 func finished() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
-		specName := getString(data, "name")
+		specName := stepkit.GetString(data, "name")
 		specPath := SpecFilePath(specName)
-		if content := getString(data, "spec_template"); content != "" {
+		if content := stepkit.GetString(data, "spec_template"); content != "" {
 			if err := st.Write(specPath, []byte(content)); err != nil {
 				return "", err
 			}
 		}
-		return "", writeStepResult("finished", "", "steps/spec/09-finished.md", data, out, st, cfg)
+		return "", writeStep("finished", "", "steps/spec/09-finished.md", data, out, st, cfg, nil)
 	}
-}
-
-// writeStepResult renders the step template and writes the result to out.
-// The spec path is derived from name and the store root rather than read from data.
-func writeStepResult(name, nextStep, templatePath string, data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config, extra ...map[string]any) error {
-	specName := getString(data, "name")
-	specPath := filepath.Join(st.Root(), SpecFilePath(specName))
-
-	vars := map[string]any{
-		"step":      name,
-		"title":     stepTitle(name),
-		"spec_path": specPath,
-		"next_step": nextStep,
-		"config":    map[string]any{"command": cfg.Command},
-	}
-	for _, m := range extra {
-		for k, v := range m {
-			vars[k] = v
-		}
-	}
-
-	instruction, err := renderTemplate(templatePath, vars)
-	if err != nil {
-		return err
-	}
-	return out.WriteResult(Result{
-		Step:        name,
-		SpecPath:    specPath,
-		SpecName:    specName,
-		Instruction: instruction,
-	})
-}
-
-// getString is a convenience helper for reading string values from Data.
-func getString(data workflow.Data, key string) string {
-	v, ok := data.Get(key)
-	if !ok {
-		return ""
-	}
-	s, _ := v.(string)
-	return s
-}
-
-// renderTemplate reads a mustache template from the embedded FS and renders it.
-func renderTemplate(templatePath string, data map[string]any) (string, error) {
-	tmplBytes, err := templates.FS.ReadFile(templatePath)
-	if err != nil {
-		return "", fmt.Errorf("loading template %s: %w", templatePath, err)
-	}
-	return mustache.Render(string(tmplBytes), data)
-}
-
-// stepTitle converts a step name like "acceptance_criteria" to "Acceptance Criteria".
-func stepTitle(name string) string {
-	words := strings.Split(name, "_")
-	for i, w := range words {
-		if len(w) > 0 {
-			words[i] = strings.ToUpper(w[:1]) + w[1:]
-		}
-	}
-	return strings.Join(words, " ")
 }

@@ -160,6 +160,34 @@ func TestCallbackGotoAdvances(t *testing.T) {
 	require.Equal(t, "real", wf.Current())
 }
 
+// TestMultiSourceTransition verifies that workflow.StepConfig.Src accepts a
+// multi-element source slice and that the FSM can fire the transition from any
+// of the listed sources. This is a prerequisite for the implement workflow's
+// analyze step, which must be reachable from both read_plan and update_changelog.
+func TestMultiSourceTransition(t *testing.T) {
+	steps := []StepConfig{
+		{Name: "one", Src: []string{"start"}, Dst: "one"},
+		{Name: "two", Src: []string{"one", "three"}, Dst: "two"},
+		{Name: "three", Src: []string{"two"}, Dst: "three"},
+	}
+
+	sp := filepath.Join(t.TempDir(), "state.json")
+	wf := New(steps, sp, Config{}, nil, nil)
+
+	require.NoError(t, wf.Goto("one"))
+	require.Equal(t, "one", wf.Current())
+
+	require.NoError(t, wf.Goto("two"))
+	require.Equal(t, "two", wf.Current())
+
+	require.NoError(t, wf.Goto("three"))
+	require.Equal(t, "three", wf.Current())
+
+	// Loop back: three → two via the multi-source edge.
+	require.NoError(t, wf.Goto("two"))
+	require.Equal(t, "two", wf.Current())
+}
+
 func TestCompletedStepsTracked(t *testing.T) {
 	sp := filepath.Join(t.TempDir(), "state.json")
 	wf := New(testSteps, sp, Config{}, nil, nil)

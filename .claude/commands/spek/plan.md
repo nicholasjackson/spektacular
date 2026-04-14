@@ -3,7 +3,20 @@ description: Create a new Plan from a Specification
 argument-hint: <spec-name>
 ---
 
-Create a new plan from an existing spec using the go run . CLI. The user must provide the name of the spec to plan against as the argument.
+# What this command does
+
+This command drives a **multi-step interactive workflow** that produces a complete implementation plan in `.spektacular/plans/<name>.md` from an existing spec. The workflow is owned by the `go run .` CLI, not by you — the CLI is the state machine and you are the executor.
+
+On each turn, the CLI returns JSON containing an `instruction` field. That instruction describes exactly one step (e.g. discovery, data structures, phases, testing approach, …). You must:
+
+1. Read the `instruction` carefully.
+2. Perform the step — this may mean researching the codebase, spawning subagents, interviewing the user, or writing a section of the plan file.
+3. When the step is complete, run the `goto` command named at the bottom of the instruction to advance the state machine.
+4. Read the next `instruction` from the new JSON response and repeat.
+
+**This is a loop. Do not stop after the first step.** Keep looping — step → goto → next instruction → step — until a returned instruction tells you the workflow is *finished*. Only then should you report completion to the user.
+
+# How to start
 
 Spec name: $ARGUMENTS
 
@@ -15,6 +28,4 @@ Start the plan workflow by running:
 go run . plan new --data '{"name": "<spec_name>"}'
 ```
 
-The command creates the plan file and state file automatically, then returns JSON with an `instruction` field. Follow that instruction exactly.
-
-Each instruction tells you to call `go run . plan goto --data '{"step":""}'` when the step is complete.
+This creates the plan file and state file automatically and returns the first `instruction`. From that point on, follow the loop above: do what the instruction says, then call `go run . plan goto --data '{"step":"<next_step>"}'` to get the next one. Do not invent step names — every instruction tells you the exact `goto` command to run next.

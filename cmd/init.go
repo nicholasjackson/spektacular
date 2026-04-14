@@ -52,6 +52,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}{
 		{"spek-new.md", filepath.Join(".claude", "commands", "spek", "new.md"), filepath.Join(".bob", "commands", "spek-new.md")},
 		{"spek-plan.md", filepath.Join(".claude", "commands", "spek", "plan.md"), filepath.Join(".bob", "commands", "spek-plan.md")},
+		{"spek-implement.md", filepath.Join(".claude", "commands", "spek", "implement.md"), filepath.Join(".bob", "commands", "spek-implement.md")},
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Spektacular initialised for %s.\n", agent)

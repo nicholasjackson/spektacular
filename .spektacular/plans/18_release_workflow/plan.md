@@ -18,7 +18,7 @@
 -->
 ## Overview
 
-A GitHub Actions release workflow for spektacular that reuses jumppad's Dagger module to build cross-platform binaries (darwin/linux on amd64/arm64), sign and notarize macOS artifacts via Quill, and publish archives as assets on GitHub Releases, along with Homebrew formula updates and GemFury package distribution. This eliminates the current need for end users to clone and `go build` spektacular themselves, providing signed, installable binaries via direct download, Homebrew, or GemFury.
+A GitHub Actions release workflow for spektacular that mirrors jumppad's Dagger-based pipeline — a Dagger module builds cross-platform binaries (darwin/linux on amd64/arm64), signs and notarizes macOS artifacts via Quill, and publishes archives as assets on GitHub Releases, along with Homebrew formula updates and GemFury package distribution. This eliminates the current need for end users to clone and `go build` spektacular themselves, providing signed, installable binaries via direct download, Homebrew, or GemFury.
 
 <!--
   ARCHITECTURE & DESIGN DECISIONS
@@ -32,19 +32,21 @@ A GitHub Actions release workflow for spektacular that reuses jumppad's Dagger m
 -->
 ## Architecture & Design Decisions
 
-The release workflow will reuse jumppad's proven Dagger module by importing it as a dependency rather than porting ~800 lines of code. Spektacular will create a thin wrapper Dagger module that imports `github.com/jumppad-labs/jumppad/dagger` and calls its functions with spektacular-specific parameters (binary name "spektacular", repo "jumppad-labs/spektacular", formula name "spektacular.rb"). This approach leverages Dagger's module system to inherit jumppad's battle-tested build, signing, and publishing logic while maintaining spektacular-specific configuration. The wrapper module will be invoked from a new `.github/workflows/build_and_deploy.yaml` workflow that runs builds on every push and gates releases to the `main` branch only.
+The release workflow will be implemented by porting jumppad's Dagger module to spektacular, creating a new `dagger/` directory containing `main.go` with a `SpektacularCI` struct that mirrors `JumppadCI`'s structure and functions. The implementation copies jumppad's proven patterns (~800 lines) and adapts them for spektacular-specific naming (binary "spektacular", repo "jumppad-labs/spektacular", formula "spektacular.rb"). Common Dagger modules (GitHub module for PR labels, Quill for signing) are reused as dependencies, while the core build orchestration logic is ported and adapted. The Dagger module will be invoked from a new `.github/workflows/build_and_deploy.yaml` workflow that runs builds on every push and gates releases to the `main` branch only.
 
 **Key design decisions**:
 
-1. **Module reuse over porting**: Importing jumppad's Dagger module as a dependency eliminates the need to port and maintain duplicate code. If direct reuse proves infeasible due to tight coupling, the implementation will fall back to creating a thin wrapper or selective porting. This trade-off prioritizes maintainability and proven patterns over custom implementation, but introduces a dependency on jumppad's module stability.
+1. **Port and adapt over module import**: Copying jumppad's implementation provides full control over the build pipeline and eliminates dependency on jumppad's module stability. The trade-off is higher initial effort (~800 lines to port) and ongoing maintenance to keep patterns aligned, but it allows spektacular-specific optimizations and removes the risk of breaking changes in jumppad's module interface.
 
-2. **PR-label-driven versioning**: Version resolution uses the Dagger GitHub module to read `release/patch|minor|major` labels from the associated PR, returning `0.0.0` when no label is found and failing the release. This enforces explicit version bumps on every merge to `main` and prevents accidental releases, but requires discipline to label every PR before merge.
+2. **Reuse common Dagger modules**: While the core orchestration is ported, common modules (Dagger GitHub module for version resolution, Quill for signing) are consumed as standard Dagger dependencies. This balances control (own orchestration) with reuse (proven signing/versioning tools).
 
-3. **Mandatory macOS notarization on every build**: The build workflow will fail if Quill credentials are missing, ensuring every pushed commit produces release-ready signed binaries. This eliminates the "forgot to sign" failure mode at release time but requires contributors to have access to signing secrets or use a fork without the signing step.
+3. **PR-label-driven versioning**: Version resolution uses the Dagger GitHub module to read `release/patch|minor|major` labels from the associated PR, returning `0.0.0` when no label is found and failing the release. This enforces explicit version bumps on every merge to `main` and prevents accidental releases, but requires discipline to label every PR before merge.
 
-4. **Shared Homebrew tap with jumppad**: The release function will create a new `Formula/spektacular.rb` file in the existing `jumppad-labs/homebrew-repo` tap, allowing users to `brew install jumppad-labs/repo/spektacular` alongside the existing `jumppad` formula. This reuses infrastructure but requires careful testing to ensure the tap remains functional for both tools.
+4. **Mandatory macOS notarization on every build**: The build workflow will fail if Quill credentials are missing, ensuring every pushed commit produces release-ready signed binaries. This eliminates the "forgot to sign" failure mode at release time but requires contributors to have access to signing secrets or use a fork without the signing step.
 
-This direction beats the alternatives (full port, minimal scope, hybrid approach) because it provides the fastest path to production-grade releases through proven architecture, ensures release artifacts are always signed and notarized through mandatory signing, and maintains consistency with jumppad's release process through shared patterns and infrastructure. See `research.md#alternatives-considered-and-rejected` for the options that were considered but rejected due to higher maintenance burden or incomplete spec coverage.
+5. **Shared Homebrew tap with jumppad**: The `UpdateBrew` function will create a new `Formula/spektacular.rb` file in the existing `jumppad-labs/homebrew-repo` tap, allowing users to `brew install jumppad-labs/repo/spektacular` alongside the existing `jumppad` formula. This reuses infrastructure but requires careful testing to ensure the tap remains functional for both tools.
+
+This direction beats the alternatives (module import, minimal scope, hybrid approach) because it provides full control over the build pipeline while reusing proven patterns, ensures release artifacts are always signed and notarized through mandatory signing, and maintains consistency with jumppad's release process through shared infrastructure. See `research.md#alternatives-considered-and-rejected` for the options that were considered but rejected.
 
 <!--
   COMPONENT BREAKDOWN
@@ -56,11 +58,17 @@ This direction beats the alternatives (full port, minimal scope, hybrid approach
 -->
 ## Component Breakdown
 
-**Spektacular Dagger Wrapper Module** — A thin wrapper module in `dagger/` that imports jumppad's Dagger module and exposes `All()` and `Release()` functions with spektacular-specific configuration. Owns the mapping between spektacular's needs (binary name, repo paths, formula name) and jumppad's generic build functions. Delegates all build, signing, and publishing logic to the imported jumppad module.
+**SpektacularCI Dagger Module** — The central orchestrator struct in `dagger/main.go` that exposes `All()` and `Release()` functions. Owns the build pipeline state, error chaining pattern, and Go build cache volume. Coordinates all other components and ensures operations fail fast when errors occur. Ported from jumppad's `JumppadCI` with spektacular-specific configuration.
 
-**Jumppad Dagger Module (Imported)** — The upstream `github.com/jumppad-labs/jumppad/dagger` module that provides the core build pipeline. Handles cross-platform Go compilation, Quill-based macOS signing/notarization, archive packaging, GitHub release creation, Homebrew formula updates, and GemFury package publishing. Consumed as a Dagger module dependency.
+**Build Component** — Handles cross-platform Go compilation for darwin/linux on amd64/arm64. Consumes the source directory and version string, produces binaries in `build/{os}/{arch}/spektacular` structure. Uses `CGO_ENABLED=0` for static binaries and injects version/git SHA via `-ldflags`. Ported from jumppad's `Build` function.
 
-**Build Configuration** — Spektacular-specific parameters passed to jumppad's module: binary name ("spektacular"), version string (from PR labels), repository ("jumppad-labs/spektacular"), formula name ("spektacular.rb"), and platform matrix (darwin/linux on amd64/arm64). Defined in the wrapper module's function signatures.
+**Archive Component** — Packages binaries into distribution archives (`.tar.gz` for linux/darwin). Consumes the build output directory, produces archives named `spektacular_{version}_{os}_{arch}.tar.gz` in an output directory. Each archive extracts to a single binary named exactly `spektacular`. Ported from jumppad's `Archive` function.
+
+**SignAndNotorize Component** — Wraps Quill-based macOS code signing and Apple notarization. Consumes darwin archives and Quill credentials (P12 cert, password, notary key/ID/issuer), extracts binaries, signs them, submits to Apple's notary service, and re-packages signed binaries into the original archive structure. Fails the build if credentials are missing or notarization fails. Ported from jumppad's `SignAndNotorize` function.
+
+**Version Resolution Component** — Uses the Dagger GitHub module to read `release/patch|minor|major` labels from the associated PR. Returns the bumped semver string or `0.0.0` when no label is found. The Release function fails when version is `0.0.0`, enforcing explicit version tagging on every merge to `main`. Ported from jumppad's `getVersion` function.
+
+**Release Component** — Orchestrates multi-channel publishing. Consumes archives, version string, and tokens (GitHub, GemFury). Creates a GitHub Release with archives as assets, updates `Formula/spektacular.rb` in `jumppad-labs/homebrew-repo`, and pushes deb/rpm packages to GemFury. Returns the released version string on success. Ported from jumppad's `Release` function.
 
 **GitHub Actions Workflow** — The `.github/workflows/build_and_deploy.yaml` file that triggers the pipeline. The `dagger_build` job runs on every push, invokes `dagger call all`, and uploads archives as a workflow artifact. The `release` job runs only on `main`, downloads the artifact, invokes `dagger call release`, and exposes the version as a job output. Uses pinned Dagger versions (CLI `0.19.8`, action `v8.2.0`).
 
@@ -73,44 +81,48 @@ This direction beats the alternatives (full port, minimal scope, hybrid approach
 -->
 ## Data Structures & Interfaces
 
-**Spektacular Dagger Module** — The wrapper module struct:
+**SpektacularCI** — The main Dagger module struct that owns pipeline state:
 ```go
 type SpektacularCI struct {
-    jumppadCI *JumppadCI // Imported from github.com/jumppad-labs/jumppad/dagger
+    lastError     error              // Error chaining for fail-fast behavior
+    goCacheVolume *dagger.CacheVolume // Persistent Go build cache
 }
 ```
 
-**Build Configuration** — Parameters passed to jumppad's module:
-- `binaryName`: "spektacular"
-- `version`: Semver string from PR labels (e.g., "1.2.3")
-- `repository`: "jumppad-labs/spektacular"
-- `formulaName`: "spektacular.rb"
-- `platforms`: `["darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64"]`
+**Build Configuration** — Inputs to the build process:
+- `src` (Directory): Source code directory to build from
+- `version` (string): Semver version to inject via ldflags (e.g., "1.2.3")
+- `gitSHA` (string): Git commit SHA for build tracking
+- Platform matrix: `["darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64"]`
 
-**Archive Metadata** — Structure inherited from jumppad's module:
+**Archive Metadata** — Structure of output archives:
 - Filename pattern: `spektacular_{version}_{os}_{arch}.tar.gz`
-- Internal structure: Single binary named `spektacular`
-- Checksum file: `checksums.txt` with SHA256 hashes
+- Internal structure: Single binary named `spektacular` (no OS/arch suffix)
+- Checksum file: `checksums.txt` with SHA256 hashes for all archives
 
-**Quill Credentials** — Required secrets for macOS signing (inherited from jumppad):
-- `QUILL_SIGN_P12`: PKCS#12 certificate file
-- `QUILL_SIGN_PASSWORD`: Certificate password
-- `QUILL_NOTORY_KEY`: Apple notary API key
-- `QUILL_NOTARY_KEY_ID`: Key identifier
-- `QUILL_NOTARY_ISSUER`: Issuer identifier
+**Quill Credentials** — Required inputs for macOS signing/notarization:
+```go
+type QuillInputs struct {
+    P12Cert       *dagger.Secret // PKCS#12 certificate file
+    P12Password   *dagger.Secret // Certificate password
+    NotaryKey     *dagger.Secret // Apple notary API key
+    NotaryKeyID   string         // Key identifier
+    NotaryIssuer  string         // Issuer identifier
+}
+```
 
-**Release Inputs** — Parameters for the Release function (inherited from jumppad):
-- `archives`: Directory containing all `.tar.gz` files
-- `githubToken`: GitHub personal access token
-- `gemfuryToken`: GemFury API token
-- Returns: Version string on success
+**Release Inputs** — Parameters for the Release function:
+- `archives` (Directory): Directory containing all `.tar.gz` files
+- `githubToken` (Secret): GitHub personal access token for releases
+- `gemfuryToken` (Secret): GemFury API token for package publishing
+- Returns: Version string (e.g., "1.2.3") on success
 
 **GitHub Actions Artifact** — Workflow artifact structure:
 - Name: `archives`
 - Contents: All four `.tar.gz` files from the build output directory
 - Consumed by: `release` job when running on `main` branch
 
-No new Go interfaces are introduced — the wrapper module delegates to jumppad's existing Dagger functions. The Dagger SDK provides all necessary abstractions (`Directory`, `File`, `Secret`, `Container`).
+No new Go interfaces are introduced — the SpektacularCI struct methods follow Dagger's function signature conventions (context.Context first parameter, error return). The Dagger SDK provides all necessary abstractions (`Directory`, `File`, `Secret`, `Container`).
 
 <!--
   IMPLEMENTATION DETAIL
@@ -122,17 +134,19 @@ No new Go interfaces are introduced — the wrapper module delegates to jumppad'
 -->
 ## Implementation Detail
 
-**Dagger Module Reuse Pattern** — The implementation follows Dagger's module import pattern where spektacular's wrapper module declares a dependency on `github.com/jumppad-labs/jumppad/dagger` in its `dagger.json` and imports the `JumppadCI` struct. The wrapper module's methods instantiate the imported module with spektacular-specific configuration and delegate all operations. This pattern is idiomatic Dagger and allows spektacular to benefit from jumppad's improvements without manual syncing.
+**Dagger Module Structure** — The implementation follows Dagger's function-based API pattern where the `SpektacularCI` struct exposes public methods that become callable Dagger functions. Each method receives `context.Context` as the first parameter and returns `error` or a typed result. The module uses Dagger's container chaining pattern where operations build on previous container states (e.g., `golang.WithEnvVariable().WithExec()`). This structure is ported directly from jumppad's `JumppadCI`.
 
-**Configuration Mapping Layer** — The wrapper module translates spektacular's domain concepts (binary name, repo, formula) into the parameters jumppad's module expects. This mapping happens at the function boundary where spektacular's `All()` and `Release()` methods call jumppad's corresponding functions with transformed inputs. The mapping is explicit and centralized in the wrapper module, making it easy to adjust if jumppad's interface changes.
+**Error Chaining Pattern** — Borrowed from jumppad's implementation, the `SpektacularCI` struct maintains a `lastError` field that all methods check via `hasError()` before proceeding. This provides fail-fast behavior where the first error in a pipeline stops all subsequent operations without cascading failures. Methods set `lastError` on failure and return it, allowing callers to detect failures while preserving the original error context.
 
-**Fallback Strategy** — If direct module import proves infeasible (e.g., jumppad's module is too tightly coupled to jumppad-specific paths), the implementation will fall back to one of two approaches: (1) create a thin adapter layer that wraps jumppad's functions and translates parameters, or (2) selectively port only the necessary functions into spektacular's module. The decision point is during Phase 1.1 when attempting the import.
+**Build Matrix Iteration** — Cross-platform builds use nested loops over OS and architecture slices, setting `GOOS` and `GOARCH` environment variables on the Go container for each combination. Each iteration produces a binary in a structured output directory (`build/{os}/{arch}/spektacular`). This pattern is idiomatic Go cross-compilation and requires no external toolchains. Ported from jumppad's build loop.
+
+**Conditional Signing Flow** — The signing component only processes archives matching the `darwin_*` pattern, skipping Linux archives entirely. For each Darwin archive, the flow is: extract binary → sign with Quill → notarize via Apple API → re-package into original archive structure → replace original file. This preserves archive naming conventions while ensuring macOS binaries are always signed and notarized. Ported from jumppad's `SignAndNotorize` function.
+
+**Multi-Channel Release Orchestration** — The `Release` function sequences three independent publishing operations (GitHub, Homebrew, GemFury) where each consumes the same archive directory but publishes to different channels. GitHub release creation uses the Dagger GitHub module, Homebrew updates use git operations to commit a formula file, and GemFury uses curl to push deb/rpm packages. Each operation is independent — a failure in one doesn't block the others from attempting. Ported from jumppad's `Release` function.
 
 **Workflow Artifact Passing** — The GitHub Actions workflow uses the artifact upload/download pattern to pass build outputs between jobs. The `dagger_build` job uploads the entire archive directory as a single artifact, and the `release` job downloads it before invoking the Dagger release function. This decouples build from release and allows the release job to be conditionally skipped on non-main branches.
 
-**Error Handling Inheritance** — The wrapper module inherits jumppad's error chaining pattern where operations check for previous errors before proceeding. This provides fail-fast behavior where the first error in a pipeline stops all subsequent operations. The wrapper module does not need to implement its own error handling — it simply propagates errors from the imported module.
-
-The implementation reuses jumppad's proven patterns (error chaining, build matrix, Quill integration, multi-channel publishing) rather than introducing new abstractions. The only spektacular-specific logic is in the configuration mapping layer that translates spektacular's parameters into jumppad's expected format.
+The implementation ports jumppad's proven patterns (error chaining, build matrix, Quill integration, multi-channel publishing) with minimal changes. The only spektacular-specific logic is in naming (binary name, repo paths, formula name) and the removal of Windows/website publishing steps.
 
 <!--
   DEPENDENCIES
@@ -142,25 +156,25 @@ The implementation reuses jumppad's proven patterns (error chaining, build matri
 -->
 ## Dependencies
 
-**Jumppad Dagger Module** — Provides the complete build, signing, and publishing pipeline. Imported as `github.com/jumppad-labs/jumppad/dagger`. No changes needed to jumppad's module.
+**Dagger Go SDK** — Provides the container orchestration and function-based API that the entire CI/CD pipeline is built on. Pinned to version `0.19.8` to match jumppad. No changes needed.
 
-**Dagger Go SDK** — Provides the container orchestration and module system. Pinned to version `0.19.8` to match jumppad. No changes needed.
+**Dagger GitHub Module** — Used for version resolution (reading PR labels) and GitHub release creation. Consumed as a Dagger module dependency. No changes needed.
 
-**Dagger GitHub Module** — Used by jumppad's module for version resolution and GitHub release creation. Consumed transitively through jumppad's module. No changes needed.
-
-**Quill (via Dagger)** — Apple code signing and notarization tool, invoked by jumppad's module. Requires P12 certificate, password, and notary credentials as secrets. No changes needed.
+**Quill (via Dagger)** — Apple code signing and notarization tool, invoked as a Dagger function. Requires P12 certificate, password, and notary credentials as secrets. No changes needed to Quill itself.
 
 **GitHub Actions** — Workflow execution platform. Requires `dagger/dagger-for-github@v8.2.0` action pinned to match jumppad. No changes needed.
 
 **GitHub Secrets** — Seven org-level secrets must exist: `GH_TOKEN`, `FURY_TOKEN`, `QUILL_SIGN_P12`, `QUILL_SIGN_PASSWORD`, `QUILL_NOTORY_KEY`, `QUILL_NOTARY_KEY_ID`, `QUILL_NOTARY_ISSUER`. These must be configured before the workflow can run successfully.
 
-**jumppad-labs/homebrew-repo** — Existing Homebrew tap repository where `Formula/spektacular.rb` will be added. No changes to the tap structure needed, but write access via `GH_TOKEN` is required.
+**jumppad-labs/homebrew-repo** — Existing Homebrew tap repository where `Formula/spektacular.rb` will be added alongside the existing `jumppad.rb` formula. No changes to the tap structure needed, but write access via `GH_TOKEN` is required.
 
-**GemFury APT Repository** — External package hosting service for deb/rpm distribution. Requires `FURY_TOKEN` for authentication. No changes needed.
+**GemFury APT Repository** — External package hosting service for deb/rpm distribution. Requires `FURY_TOKEN` for authentication. No changes needed to the service itself.
 
-**fpm or nfpm** — Package building tool for creating deb/rpm packages. Jumppad's module already uses this; spektacular inherits the dependency. No changes needed.
+**fpm or nfpm** — Package building tool for creating deb/rpm packages from binaries. Jumppad uses this pattern; spektacular will adopt the same approach. This is a new dependency for spektacular but follows jumppad's proven pattern.
 
 **Go toolchain** — Required for cross-compilation. Uses the version specified in `go.mod` (currently `1.25.0`). No changes needed.
+
+**Jumppad's Dagger Implementation** — Reference implementation at `github.com/jumppad-labs/jumppad/dagger/main.go` serves as the source for porting. No runtime dependency, only used as a reference during implementation.
 
 No prior specs or plans block this work — the release workflow is independent of other spektacular features. The existing `.github/workflows/build.yml` will be replaced, so there are no compatibility constraints with the current workflow.
 
@@ -174,7 +188,7 @@ No prior specs or plans block this work — the release workflow is independent 
 -->
 ## Testing Approach
 
-**Manual Dagger Function Testing** — Each Dagger function (`All`, `Release`) will be tested manually via `dagger call` commands during development. This allows verifying behavior with real inputs before committing changes.
+**Manual Dagger Function Testing** — Each Dagger function (`Build`, `Archive`, `SignAndNotorize`, `Release`) will be tested manually via `dagger call` commands during development. This allows verifying behavior with real inputs before committing changes.
 
 **Manual Archive Verification** — After running the build, manually verify that:
 - Archives follow the naming pattern `spektacular_{version}_{os}_{arch}.tar.gz`
@@ -211,36 +225,45 @@ No prior specs or plans block this work — the release workflow is independent 
 
 #### - [ ] Phase 1.1: Dagger Module Scaffolding
 
-Create the basic Dagger module structure that imports jumppad's module and exposes wrapper functions. This establishes the foundation for reusing jumppad's proven build pipeline.
+Create the basic Dagger module structure with the `SpektacularCI` struct and error chaining pattern. This establishes the foundation for all subsequent build functions by porting jumppad's module structure.
 
 *Technical detail:* [context.md#phase-11-dagger-module-scaffolding](./context.md#phase-11-dagger-module-scaffolding)
 
 **Acceptance criteria**:
-- [ ] `dagger/dagger.json` exists and declares a dependency on `github.com/jumppad-labs/jumppad/dagger`
-- [ ] `dagger/main.go` contains a `SpektacularCI` struct that imports and wraps `JumppadCI`
-- [ ] Running `dagger functions` lists the wrapper functions without errors
-- [ ] The module can be instantiated and called locally via `dagger call`
+- [ ] `dagger/dagger.json` exists and defines the module name as "spektacular"
+- [ ] `dagger/main.go` contains a `SpektacularCI` struct with `lastError` and `goCacheVolume` fields
+- [ ] Running `dagger functions` lists the module functions without errors
 
 #### - [ ] Phase 1.2: Cross-Platform Build Function
 
-Implement the `All` wrapper function that calls jumppad's build pipeline with spektacular-specific configuration.
+Implement the `Build` function that compiles spektacular for all four target platforms using Go's native cross-compilation. Ported from jumppad's `Build` function with spektacular-specific binary naming.
 
 *Technical detail:* [context.md#phase-12-cross-platform-build-function](./context.md#phase-12-cross-platform-build-function)
 
 **Acceptance criteria**:
-- [ ] `dagger call all --src=. --version=1.0.0` produces four binaries in the expected directory structure
+- [ ] `dagger call build --src=. --version=1.0.0` produces four binaries in the expected directory structure
 - [ ] Each binary reports the correct version when executed with `--version`
 - [ ] Linux binaries are statically linked (no dynamic dependencies)
 - [ ] Darwin binaries are statically linked (no dynamic dependencies beyond system frameworks)
-- [ ] Archives are created with the naming pattern `spektacular_{version}_{os}_{arch}.tar.gz`
 
-### Milestone 2: Archive Packaging and macOS Signing
+#### - [ ] Phase 1.3: Archive Creation
 
-**What changes**: The Dagger module produces distribution-ready archives via `dagger call all`, creating `.tar.gz` files for each platform with the correct naming pattern. macOS archives are automatically signed and notarized via Quill, ensuring binaries pass Gatekeeper checks on user machines. This milestone delivers the complete artifact creation pipeline, making spektacular installable via direct download without triggering security warnings.
+Implement the `Archive` function that packages binaries into `.tar.gz` files with the correct naming pattern. Ported from jumppad's `Archive` function.
+
+*Technical detail:* [context.md#phase-13-archive-creation](./context.md#phase-13-archive-creation)
+
+**Acceptance criteria**:
+- [ ] `dagger call all` produces four archives named `spektacular_{version}_{os}_{arch}.tar.gz`
+- [ ] Each archive extracts to a single binary named exactly `spektacular`
+- [ ] Archive directory contains a `checksums.txt` file with SHA256 hashes
+
+### Milestone 2: macOS Signing and Notarization
+
+**What changes**: The Dagger module produces distribution-ready archives with macOS binaries automatically signed and notarized via Quill, ensuring binaries pass Gatekeeper checks on user machines. This milestone delivers the complete artifact creation pipeline, making spektacular installable via direct download without triggering security warnings.
 
 #### - [ ] Phase 2.1: macOS Signing and Notarization
 
-Configure the wrapper to pass Quill credentials to jumppad's signing function, ensuring macOS binaries are signed and notarized.
+Implement the `SignAndNotorize` function that signs and notarizes macOS binaries via Quill. Ported from jumppad's `SignAndNotorize` function.
 
 *Technical detail:* [context.md#phase-21-macos-signing-and-notarization](./context.md#phase-21-macos-signing-and-notarization)
 
@@ -255,20 +278,65 @@ Configure the wrapper to pass Quill credentials to jumppad's signing function, e
 
 **What changes**: The Dagger module can publish a complete release via `dagger call release`, creating a GitHub Release with all archives as assets, updating the Homebrew formula in `jumppad-labs/homebrew-repo`, and pushing packages to GemFury. Users can now install spektacular via `brew install jumppad-labs/repo/spektacular` on macOS or download signed binaries directly from GitHub Releases. This completes the distribution pipeline, making spektacular available through standard package managers.
 
-#### - [ ] Phase 3.1: Release Orchestration
+#### - [ ] Phase 3.1: Version Resolution
 
-Implement the `Release` wrapper function that calls jumppad's release pipeline with spektacular-specific configuration.
+Implement the `getVersion` function that reads PR labels via the Dagger GitHub module. Ported from jumppad's `getVersion` function.
 
-*Technical detail:* [context.md#phase-31-release-orchestration](./context.md#phase-31-release-orchestration)
+*Technical detail:* [context.md#phase-31-version-resolution](./context.md#phase-31-version-resolution)
 
 **Acceptance criteria**:
-- [ ] `dagger call release` creates a GitHub Release tagged with the resolved version
+- [ ] Function returns the correct semver bump for `release/patch`, `release/minor`, and `release/major` labels
+- [ ] Function returns `0.0.0` when no release label is present
+- [ ] Function fails with a clear error when multiple release labels are present
+
+#### - [ ] Phase 3.2: GitHub Release Creation
+
+Implement the `GithubRelease` function that creates a GitHub Release with archives as assets. Ported from jumppad's `GithubRelease` function.
+
+*Technical detail:* [context.md#phase-32-github-release-creation](./context.md#phase-32-github-release-creation)
+
+**Acceptance criteria**:
+- [ ] Function creates a GitHub Release tagged with the resolved version
 - [ ] All four archives are attached as release assets
-- [ ] A new commit appears in `jumppad-labs/homebrew-repo` updating `Formula/spektacular.rb`
-- [ ] The formula contains download URLs for both darwin platforms with correct SHA256 checksums
+- [ ] Release title and body contain the version and basic metadata
+- [ ] Function fails gracefully when the release already exists
+
+#### - [ ] Phase 3.3: Homebrew Formula Update
+
+Implement the `UpdateBrew` function that commits a new formula to `jumppad-labs/homebrew-repo`. Ported from jumppad's `UpdateBrew` function with spektacular-specific formula naming.
+
+*Technical detail:* [context.md#phase-33-homebrew-formula-update](./context.md#phase-33-homebrew-formula-update)
+
+**Acceptance criteria**:
+- [ ] Function creates a new commit on `main` in `jumppad-labs/homebrew-repo`
+- [ ] Commit adds or updates `Formula/spektacular.rb` with the correct version
+- [ ] Formula contains download URLs for both darwin platforms
+- [ ] Formula contains SHA256 checksums matching the archives
+- [ ] Running `brew install jumppad-labs/repo/spektacular` successfully installs the binary
+
+#### - [ ] Phase 3.4: GemFury Package Publishing
+
+Implement the `UpdateGemFury` function that uploads deb/rpm packages to GemFury. Ported from jumppad's `UpdateGemFury` function.
+
+*Technical detail:* [context.md#phase-34-gemfury-package-publishing](./context.md#phase-34-gemfury-package-publishing)
+
+**Acceptance criteria**:
+- [ ] Function creates deb packages for linux/amd64 and linux/arm64
+- [ ] Function uploads packages to GemFury via curl
 - [ ] Packages appear in the GemFury repository after upload
+- [ ] Function fails gracefully when upload fails
+
+#### - [ ] Phase 3.5: Release Orchestration
+
+Implement the `Release` function that sequences all publishing operations. Ported from jumppad's `Release` function.
+
+*Technical detail:* [context.md#phase-35-release-orchestration](./context.md#phase-35-release-orchestration)
+
+**Acceptance criteria**:
+- [ ] Function calls `getVersion`, `GithubRelease`, `UpdateBrew`, and `UpdateGemFury` in sequence
 - [ ] Function returns the released version string on success
-- [ ] Function fails when version is `0.0.0` (no PR label)
+- [ ] Function fails when version is `0.0.0`
+- [ ] Function logs progress for each publishing operation
 
 ### Milestone 4: GitHub Actions Automation
 
@@ -321,12 +389,7 @@ Remove the existing `.github/workflows/build.yml` file.
 -->
 ## Open Questions
 
-**Dagger module reuse vs. custom implementation** — Dagger supports importing modules as dependencies (e.g., `dagger install github.com/jumppad-labs/jumppad/dagger`). The implementer should first attempt to reuse jumppad's Dagger module directly by importing it and calling its functions with spektacular-specific parameters (binary name, repo paths, formula name). If direct reuse works, the implementation becomes configuration rather than porting ~800 lines of code. If jumppad's module is too tightly coupled to jumppad-specific paths or naming, the implementer should STOP and ask the user whether to:
-1. Fork jumppad's module and adapt it for spektacular
-2. Create a thin wrapper module that delegates to jumppad's module
-3. Port the necessary functions into a new spektacular-specific module
-
-**GemFury package metadata** — The exact package metadata (maintainer, description, license, dependencies) and fpm/nfpm invocation will be discovered when examining jumppad's `UpdateGemFury` implementation. If the ported or reused function fails to produce valid packages, the implementer should STOP and ask the user for guidance on package metadata or scope adjustment.
+**GemFury package metadata** — The exact package metadata (maintainer, description, license, dependencies) and fpm/nfpm invocation will be discovered when porting jumppad's `UpdateGemFury` implementation. If the ported function fails to produce valid packages, the implementer should STOP and ask the user for guidance on package metadata or scope adjustment.
 
 **Homebrew tap write permissions** — The `GH_TOKEN` secret must have write access to `jumppad-labs/homebrew-repo`. If permissions are insufficient or branch protection blocks automated commits, the implementer should STOP and ask the user to verify token permissions.
 
