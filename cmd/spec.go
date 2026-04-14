@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/jumppad-labs/spektacular/internal/output"
 	"github.com/jumppad-labs/spektacular/internal/steps/spec"
@@ -93,17 +94,42 @@ func stateFilePath(dataDir string) string {
 	return filepath.Join(dataDir, "state.json")
 }
 
-// readStdinIntoWorkflow reads all of stdin and stores it in the workflow data
-// under stdinKey, if stdinKey is non-empty.
-func readStdinIntoWorkflow(cmd *cobra.Command, wf interface{ SetData(string, any) }, stdinKey string) error {
-	if stdinKey == "" {
+// readInputIntoWorkflow reads content from either --stdin or --file and stores
+// it in the workflow data. --stdin <key> reads from standard input and stores
+// under <key>. --file <path> reads the file at <path> (relative paths resolve
+// against the process cwd) and stores under the filename's basename without
+// extension. Only one of the two flags may be set at a time.
+func readInputIntoWorkflow(cmd *cobra.Command, wf interface{ SetData(string, any) }) error {
+	stdinKey, _ := cmd.Flags().GetString("stdin")
+	filePath, _ := cmd.Flags().GetString("file")
+
+	if stdinKey != "" && filePath != "" {
+		return fmt.Errorf("--stdin and --file are mutually exclusive")
+	}
+
+	if stdinKey != "" {
+		content, err := io.ReadAll(cmd.InOrStdin())
+		if err != nil {
+			return fmt.Errorf("reading stdin: %w", err)
+		}
+		wf.SetData(stdinKey, string(content))
 		return nil
 	}
-	content, err := io.ReadAll(cmd.InOrStdin())
-	if err != nil {
-		return fmt.Errorf("reading stdin: %w", err)
+
+	if filePath != "" {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("reading file %s: %w", filePath, err)
+		}
+		base := filepath.Base(filePath)
+		key := strings.TrimSuffix(base, filepath.Ext(base))
+		if key == "" {
+			return fmt.Errorf("--file path %q has no filename", filePath)
+		}
+		wf.SetData(key, string(content))
+		return nil
 	}
-	wf.SetData(stdinKey, string(content))
+
 	return nil
 }
 
@@ -160,8 +186,7 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 	wf := workflow.New(steps, statePath, wfCfg, store.NewFileStore(dataDir), out)
 	wf.SetData("name", input.Name)
 
-	stdinKey, _ := cmd.Flags().GetString("stdin")
-	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+	if err := readInputIntoWorkflow(cmd, wf); err != nil {
 		return err
 	}
 
@@ -221,8 +246,7 @@ func runSpecGoto(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	stdinKey, _ := cmd.Flags().GetString("stdin")
-	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+	if err := readInputIntoWorkflow(cmd, wf); err != nil {
 		return err
 	}
 
@@ -293,8 +317,10 @@ func init() {
 
 	specNewCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"name":"my-feature"}')`)
 	specNewCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+	specNewCmd.Flags().String("file", "", "Read a file at <path> (relative to cwd) and store its contents under the filename's basename (without extension)")
 	specGotoCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"step":"requirements"}')`)
 	specGotoCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+	specGotoCmd.Flags().String("file", "", "Read a file at <path> (relative to cwd) and store its contents under the filename's basename (without extension)")
 
 	specCmd.AddCommand(specNewCmd, specGotoCmd, specStatusCmd, specStepsCmd)
 }

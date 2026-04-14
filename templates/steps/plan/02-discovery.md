@@ -4,17 +4,16 @@ Research the codebase to understand what's needed to implement the spec you read
 
 ### Step 1: Project Context
 
-Check if reference docs exist and create them if missing:
+Search `.spektacular/knowledge/` for anything already written about this area of the codebase — architecture notes, conventions, gotchas, prior learnings. If something relevant exists, read it before investigating; it may already answer your questions or flag dead ends. Nothing is required to exist here — the directory can be empty.
 
-- Check if `thoughts/notes/commands.md` exists. If not, use the `discover-project-commands` skill. For skill details: `{{config.command}} skill discover-project-commands`
-- Check if `thoughts/notes/testing.md` exists. If not, use the `discover-test-patterns` skill. For skill details: `{{config.command}} skill discover-test-patterns`
+If the plan touches tests, read the relevant test files directly as part of Step 2 to understand conventions (framework, naming, fixtures, mocking) before planning changes. Don't cache findings — the test files are the source of truth.
 
 ### Step 2: Codebase Research
 
 Research the codebase in parallel to find:
 
 1. **Files related to the plan** — Organize by category (implementation, tests, config, docs)
-2. **Prior research** — Existing plans, research, or tickets in `thoughts/`, `.spektacular/plans/`, `.spektacular/specs/`
+2. **Prior research** — Existing plans, research, or tickets in `.spektacular/knowledge/`, `.spektacular/plans/`, `.spektacular/specs/`
 3. **Similar implementations** — Code examples to model after, with file:line references
 4. **Architecture and integration points** — How the relevant components fit together
 5. **Alternatives to consider** — Identify 2-3 viable approaches so the next step can compare them with evidence

@@ -4,7 +4,7 @@ Determine the feature slug (namespace + number) for a plan document.
 
 ## Instructions
 
-1. **Auto-detect the next number**: Look at existing plan files in `.spektacular/plans/` and `thoughts/plans/` to find the highest existing number. Increment by 1.
+1. **Auto-detect the next number**: Look at existing plan files in `.spektacular/plans/` to find the highest existing number. Increment by 1.
 
 2. **Format**: `NNNN-description` where:
    - `NNNN` is a zero-padded 4-digit number (e.g., `0001`, `0042`)
@@ -22,5 +22,5 @@ If the highest existing plan number is `0003`:
 
 ```bash
 # Find existing plan numbers
-ls .spektacular/plans/ thoughts/plans/ 2>/dev/null | grep -oP '^\d+' | sort -n | tail -1
+ls .spektacular/plans/ 2>/dev/null | grep -oP '^\d+' | sort -n | tail -1
 ```

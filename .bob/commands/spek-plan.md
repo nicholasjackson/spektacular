@@ -5,7 +5,7 @@ argument-hint: <spec-name>
 
 # What this command does
 
-This command drives a **multi-step interactive workflow** that produces a complete implementation plan in `.spektacular/plans/<name>.md` from an existing spec. The workflow is owned by the `{{command}}` CLI, not by you — the CLI is the state machine and you are the executor.
+This command drives a **multi-step interactive workflow** that produces a complete implementation plan in `.spektacular/plans/<name>.md` from an existing spec. The workflow is owned by the `go run .` CLI, not by you — the CLI is the state machine and you are the executor.
 
 On each turn, the CLI returns JSON containing an `instruction` field. That instruction describes exactly one step (e.g. discovery, data structures, phases, testing approach, …). You must:
 
@@ -25,7 +25,7 @@ If no spec name was provided, check `.spektacular/state.json` for an active spec
 Start the plan workflow by running:
 
 ```
-{{command}} plan new --data '{"name": "<spec_name>"}'
+go run . plan new --data '{"name": "<spec_name>"}'
 ```
 
-This creates the plan file and state file automatically and returns the first `instruction`. From that point on, follow the loop above: do what the instruction says, then call `{{command}} plan goto --data '{"step":"<next_step>"}'` to get the next one. Do not invent step names — every instruction tells you the exact `goto` command to run next.
+This creates the plan file and state file automatically and returns the first `instruction`. From that point on, follow the loop above: do what the instruction says, then call `go run . plan goto --data '{"step":"<next_step>"}'` to get the next one. Do not invent step names — every instruction tells you the exact `goto` command to run next.

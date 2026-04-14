@@ -33,7 +33,7 @@ For guidance on agent orchestration: `{{config.command}} skill spawn-implementat
 
 - Every file change must reference a specific file (and line range where applicable) in context.md.
 - NO open questions — resolve any uncertainties now.
-- Acceptance criteria in plan.md are outcome statements, not shell commands. Verification commands belong in `thoughts/notes/commands.md` or in the agent's head, not in plan.md.
+- Acceptance criteria in plan.md are outcome statements, not shell commands. Verification commands belong in the agent's head, not in plan.md.
 - The phase summary in plan.md is the primary artifact the user reads — prioritize clarity over completeness.
 
 Present the phases to the user for review. Once agreed, advance:

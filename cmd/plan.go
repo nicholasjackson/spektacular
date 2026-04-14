@@ -118,8 +118,7 @@ func runPlanNew(cmd *cobra.Command, _ []string) error {
 	wf := workflow.New(steps, statePath, wfCfg, store.NewFileStore(dataDir), out)
 	wf.SetData("name", input.Name)
 
-	stdinKey, _ := cmd.Flags().GetString("stdin")
-	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+	if err := readInputIntoWorkflow(cmd, wf); err != nil {
 		return err
 	}
 
@@ -183,8 +182,7 @@ func runPlanGoto(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("no active plan found — run 'plan new' first")
 	}
 
-	stdinKey, _ := cmd.Flags().GetString("stdin")
-	if err := readStdinIntoWorkflow(cmd, wf, stdinKey); err != nil {
+	if err := readInputIntoWorkflow(cmd, wf); err != nil {
 		return err
 	}
 
@@ -259,8 +257,10 @@ func init() {
 
 	planNewCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"name":"my-feature"}')`)
 	planNewCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+	planNewCmd.Flags().String("file", "", "Read a file at <path> (relative to cwd) and store its contents under the filename's basename (without extension)")
 	planGotoCmd.Flags().StringP("data", "d", "", `JSON input (e.g. '{"step":"discovery"}')`)
 	planGotoCmd.Flags().String("stdin", "", "Read stdin and store it in workflow data under this key")
+	planGotoCmd.Flags().String("file", "", "Read a file at <path> (relative to cwd) and store its contents under the filename's basename (without extension)")
 
 	planCmd.AddCommand(planNewCmd, planGotoCmd, planStatusCmd, planStepsCmd)
 }

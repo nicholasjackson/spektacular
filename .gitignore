@@ -42,6 +42,7 @@ vendor/
 
 # Spektacular debug output
 .spektacular/debug/
+.spektacular/tmp/
 
 # Temporary files
 *.tmp

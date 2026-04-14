@@ -79,12 +79,12 @@ Then verify quality:
 
 If any section is missing from any document, add it and re-review before proceeding. Do **not** advance until every section in every list above is present.
 
-### Step 5: Pipe plan.md
+### Step 5: Submit plan.md
 
-Do **not** use the `Write` tool. Pipe the filled plan.md via stdin — spektacular will write it to `{{plan_path}}`:
+Do **not** write directly to `{{plan_path}}` — spektacular owns that file. Instead, use the `Write` tool to stage the filled plan.md at `.spektacular/tmp/plan_template.md`, then submit it via `--file`:
 
 ```
-cat <<'EOF' | {{config.command}} plan goto --data '{"step":"{{next_step}}"}' --stdin plan_template
-<complete filled plan.md here>
-EOF
+{{config.command}} plan goto --data '{"step":"{{next_step}}"}' --file .spektacular/tmp/plan_template.md
 ```
+
+Spektacular reads the file and stores its contents under the workflow key derived from the filename (`plan_template`), then writes the final plan to `{{plan_path}}`. The `--file` flag is required here (not `--stdin`) because large plans exceed the tool-call size limit when inlined as a heredoc.

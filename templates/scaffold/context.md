@@ -25,13 +25,6 @@
 <!-- How testing is approached across the plan. -->
 
 
-## Project References
-
-<!-- Reference docs used during planning. -->
-- `thoughts/notes/commands.md` — Project commands
-- `thoughts/notes/testing.md` — Testing patterns
-
-
 ## Token Management Strategy
 
 | Tier | Token Budget | Agent Strategy |
