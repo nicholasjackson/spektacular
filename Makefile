@@ -21,6 +21,18 @@ clean:
 install-local: build
 	sudo cp $(BINARY) /usr/local/bin/$(BINARY)
 
+dagger_build:
+	dagger -v call --progress=plain -m dagger all \
+		--output=./all_archive \
+		--src=. \
+		--notorize-cert=${QUILL_SIGN_P12} \
+		--notorize-cert-password=QUILL_SIGN_PASSWORD \
+		--notorize-key=${QUILL_NOTARY_KEY} \
+		--notorize-id=${QUILL_NOTARY_KEY_ID} \
+		--notorize-issuer=${QUILL_NOTARY_ISSUER}
+
+#--github-token=GITHUB_TOKEN \
+
 cross:
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o ./bin/$(BINARY)-darwin-arm64  .
 	CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -o ./bin/$(BINARY)-darwin-amd64  .

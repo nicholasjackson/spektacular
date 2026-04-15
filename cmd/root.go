@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "0.1.0"
+var version = "0.1.0"
 
 // globalFields holds the raw --fields JSON array string, available to all subcommands.
 var globalFields string

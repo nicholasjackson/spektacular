@@ -54,3 +54,6 @@ tests/harbor/*/environment/spektacular
 jobs/
 
 __pycache__
+
+all_archive
+.bob/notes
