@@ -1,0 +1,39 @@
+{
+  "name": "spektacular",
+  "engineVersion": "v0.19.8",
+  "sdk": {
+    "source": "go"
+  },
+  "dependencies": [
+    {
+      "name": "brew",
+      "source": "https://github.com/jumppad-labs/daggerverse/brew@main",
+      "pin": "d949672adab8fe692916f8e08e885b45bb53502c"
+    },
+    {
+      "name": "checksum",
+      "source": "https://github.com/jumppad-labs/daggerverse/checksum@main",
+      "pin": "45014437f1e4b2474e632a7daf14e5aa8744680f"
+    },
+    {
+      "name": "deb",
+      "source": "github.com/jumppad-labs/daggerverse/deb@351e2ff5105e7d4240cb886db5746e89699b3e25",
+      "pin": "351e2ff5105e7d4240cb886db5746e89699b3e25"
+    },
+    {
+      "name": "github",
+      "source": "github.com/jumppad-labs/daggerverse/github@5dc7f2bdfb6aea009ae1da3e59ab26b990afa1db",
+      "pin": "5dc7f2bdfb6aea009ae1da3e59ab26b990afa1db"
+    },
+    {
+      "name": "jumppad",
+      "source": "https://github.com/jumppad-labs/daggerverse/jumppad@main",
+      "pin": "49c310ce1df9ba68278458e0d09ea4324db45cea"
+    },
+    {
+      "name": "notorize",
+      "source": "github.com/jumppad-labs/daggerverse/notorize@351e2ff5105e7d4240cb886db5746e89699b3e25",
+      "pin": "351e2ff5105e7d4240cb886db5746e89699b3e25"
+    }
+  ]
+}

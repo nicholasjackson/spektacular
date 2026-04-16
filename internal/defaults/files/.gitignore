@@ -1,7 +1,0 @@
-*.tmp
-*.log
-.env
-
-# build output
-spektacular
-spektacular-*

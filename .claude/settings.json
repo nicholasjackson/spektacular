@@ -6,10 +6,16 @@
       "Bash(go build ./...)",
       "Bash(make *)",
       "Bash(./spektacular *)",
-      "Bash(claude -p \"say hello\" --output-format stream-json --verbose)"
+      "Bash(claude -p \"say hello\" --output-format stream-json --verbose)",
+      "Read(//tmp/spek-test/**)",
+      "WebFetch(domain:github.com)",
+      "Bash(sort -t_ -k1 -n)",
+      "Bash(grep -n \"write\\\\|Write\\\\|spec file\" /home/nicj/code/github.com/jumppad-labs/spektacular/templates/spec-steps/*.md)"
     ],
     "additionalDirectories": [
-      "/home/nicj/code/github.com/nicholasjackson/spektacular"
+      "/home/nicj/code/github.com/nicholasjackson/spektacular",
+      "/home/nicj/code/github.com/jumppad-labs/spektacular/templates/spec-steps",
+      "/home/nicj/code/github.com/jumppad-labs/spektacular/.spektacular/plans"
     ]
   }
 }

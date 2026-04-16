@@ -152,6 +152,73 @@ complexity:
 
 See the [architecture document](.spektacular/knowledge/architecture/initial-idea.md) for the full vision.
 
+## Testing
+
+Spektacular uses [Harbor](https://harborframework.com/) to run end-to-end tests against
+real AI coding agents inside sandboxed Docker containers.
+
+### Prerequisites
+
+- Docker
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+
+### Install Harbor
+
+```bash
+uv tool install harbor
+```
+
+### Run the oracle (scripted) tests
+
+The oracle agent runs a scripted solution to validate the test harness itself —
+no AI tokens required:
+
+```bash
+harbor run -p tests/harbor/spec-workflow -a oracle -o tests/harbor/jobs
+```
+
+### Run with a real agent
+
+Harbor needs an auth token to run Claude Code inside the container. If you use
+Claude Max (OAuth), export the token from your local credentials:
+
+```bash
+export ANTHROPIC_AUTH_TOKEN=$(python3 -c "import json; print(json.load(open('$HOME/.claude/.credentials.json'))['claudeAiOauth']['accessToken'])")
+```
+
+If you use an API key instead, export that:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Then run:
+
+```bash
+harbor run -p tests/harbor/spec-workflow -a claude-code -m claude-sonnet-4-6 -o tests/harbor/jobs
+```
+
+### Test results
+
+Results are written to `tests/harbor/jobs/` (gitignored). Each run produces:
+
+```
+tests/harbor/jobs/<timestamp>/
+├── result.json                    # Overall pass/fail and metrics
+└── spec-workflow__<id>/
+    ├── agent/                     # Agent output log
+    ├── verifier/
+    │   ├── test-stdout.txt        # pytest output
+    │   └── reward.txt             # 1 = pass, 0 = fail
+    └── trial.log                  # Full trial log
+```
+
+### Available test tasks
+
+| Task | Description |
+|---|---|
+| `tests/harbor/spec-workflow` | Full spec creation workflow through all 10 steps |
+
 ## Building from Source
 
 ```bash

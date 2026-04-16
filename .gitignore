@@ -42,7 +42,18 @@ vendor/
 
 # Spektacular debug output
 .spektacular/debug/
+.spektacular/tmp/
 
 # Temporary files
 *.tmp
 *.log
+
+# Harbor test results
+tests/harbor/jobs/
+tests/harbor/*/environment/spektacular
+jobs/
+
+__pycache__
+
+all_archive
+.bob/notes

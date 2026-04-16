@@ -1,0 +1,214 @@
+package stepkit
+
+import (
+	"path/filepath"
+	"testing"
+
+	"github.com/jumppad-labs/spektacular/internal/store"
+	"github.com/jumppad-labs/spektacular/internal/workflow"
+	"github.com/stretchr/testify/require"
+)
+
+type testData struct {
+	values map[string]any
+}
+
+func (d *testData) Get(key string) (any, bool) {
+	v, ok := d.values[key]
+	return v, ok
+}
+
+func (d *testData) Set(key string, value any) {
+	d.values[key] = value
+}
+
+type captureWriter struct {
+	result any
+}
+
+func (c *captureWriter) WriteResult(v any) error {
+	c.result = v
+	return nil
+}
+
+type fakeStrategy struct {
+	primary string
+	vars    map[string]any
+}
+
+func (f fakeStrategy) PathVars(instanceName, storeRoot string) map[string]any {
+	out := map[string]any{
+		"fake_path":      filepath.Join(storeRoot, "fake", instanceName+".md"),
+		"fake_name":      instanceName,
+		"fake_store":     storeRoot,
+		"fake_primary":   filepath.Join(storeRoot, instanceName),
+	}
+	for k, v := range f.vars {
+		out[k] = v
+	}
+	return out
+}
+
+func (f fakeStrategy) PrimaryPathField() string {
+	if f.primary != "" {
+		return f.primary
+	}
+	return "fake_primary"
+}
+
+type fakeResult struct {
+	StepName     string
+	InstanceName string
+	PrimaryPath  string
+	Instruction  string
+}
+
+func buildFakeResult(stepName, instanceName, primaryPath, instruction string) any {
+	return fakeResult{
+		StepName:     stepName,
+		InstanceName: instanceName,
+		PrimaryPath:  primaryPath,
+		Instruction:  instruction,
+	}
+}
+
+func TestStepTitle(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"a", "A"},
+		{"overview", "Overview"},
+		{"data_structures", "Data Structures"},
+		{"multi_word_snake", "Multi Word Snake"},
+		{"acceptance_criteria", "Acceptance Criteria"},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.want, StepTitle(tc.in))
+	}
+}
+
+func TestGetString(t *testing.T) {
+	data := &testData{values: map[string]any{
+		"present": "hello",
+		"typed":   42,
+	}}
+	require.Equal(t, "hello", GetString(data, "present"))
+	require.Equal(t, "", GetString(data, "missing"))
+	require.Equal(t, "", GetString(data, "typed"))
+}
+
+func TestRenderTemplateSuccess(t *testing.T) {
+	out, err := RenderTemplate("steps/plan/01-overview.md", map[string]any{
+		"step":      "overview",
+		"title":     "Overview",
+		"next_step": "discovery",
+		"config":    map[string]any{"command": "spektacular"},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+	require.Contains(t, out, "Overview")
+}
+
+func TestRenderTemplateMissing(t *testing.T) {
+	_, err := RenderTemplate("steps/plan/does-not-exist.md", map[string]any{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "loading template")
+}
+
+func TestWriteStepResultStandardAndStrategyVars(t *testing.T) {
+	tmp := t.TempDir()
+	data := &testData{values: map[string]any{"name": "widget"}}
+	writer := &captureWriter{}
+	st := store.NewFileStore(tmp)
+
+	err := WriteStepResult(
+		StepRequest{
+			StepName:     "overview",
+			NextStep:     "discovery",
+			TemplatePath: "steps/plan/01-overview.md",
+			Strategy:     fakeStrategy{},
+		},
+		data, writer, st, workflow.Config{Command: "spektacular"},
+		buildFakeResult,
+	)
+	require.NoError(t, err)
+
+	got, ok := writer.result.(fakeResult)
+	require.True(t, ok)
+	require.Equal(t, "overview", got.StepName)
+	require.Equal(t, "widget", got.InstanceName)
+	require.Equal(t, filepath.Join(tmp, "widget"), got.PrimaryPath)
+	require.NotEmpty(t, got.Instruction)
+}
+
+func TestWriteStepResultExtraOverridesStrategy(t *testing.T) {
+	tmp := t.TempDir()
+	data := &testData{values: map[string]any{"name": "widget"}}
+	writer := &captureWriter{}
+	st := store.NewFileStore(tmp)
+
+	// Inject a fake strategy that returns fake_primary = X, then override
+	// via Extra to Y. Result should reflect the pre-override strategy value
+	// because PrimaryPathField reads from pathVars, not the merged vars —
+	// this is intentional so per-callback Extras can override rendered
+	// template text without changing the emitted Result's primary path.
+	err := WriteStepResult(
+		StepRequest{
+			StepName:     "overview",
+			NextStep:     "discovery",
+			TemplatePath: "steps/plan/01-overview.md",
+			Strategy:     fakeStrategy{},
+			Extra:        map[string]any{"title": "OverriddenTitle"},
+		},
+		data, writer, st, workflow.Config{Command: "spektacular"},
+		buildFakeResult,
+	)
+	require.NoError(t, err)
+
+	got := writer.result.(fakeResult)
+	require.Contains(t, got.Instruction, "OverriddenTitle")
+}
+
+func TestWriteStepResultMissingTemplateError(t *testing.T) {
+	data := &testData{values: map[string]any{"name": "widget"}}
+	writer := &captureWriter{}
+	st := store.NewFileStore(t.TempDir())
+
+	err := WriteStepResult(
+		StepRequest{
+			StepName:     "overview",
+			NextStep:     "discovery",
+			TemplatePath: "steps/plan/does-not-exist.md",
+			Strategy:     fakeStrategy{},
+		},
+		data, writer, st, workflow.Config{Command: "spektacular"},
+		buildFakeResult,
+	)
+	require.Error(t, err)
+	require.Nil(t, writer.result)
+}
+
+func TestWriteStepResultRequiresStrategy(t *testing.T) {
+	err := WriteStepResult(
+		StepRequest{StepName: "x", TemplatePath: "y"},
+		&testData{values: map[string]any{}},
+		&captureWriter{},
+		store.NewFileStore(t.TempDir()),
+		workflow.Config{},
+		buildFakeResult,
+	)
+	require.Error(t, err)
+}
+
+func TestWriteStepResultRequiresBuilder(t *testing.T) {
+	err := WriteStepResult(
+		StepRequest{StepName: "x", TemplatePath: "y", Strategy: fakeStrategy{}},
+		&testData{values: map[string]any{}},
+		&captureWriter{},
+		store.NewFileStore(t.TempDir()),
+		workflow.Config{},
+		nil,
+	)
+	require.Error(t, err)
+}

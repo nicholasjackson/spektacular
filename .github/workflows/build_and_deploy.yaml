@@ -1,0 +1,77 @@
+name: Build And Deploy
+on:
+  push:
+    branches:
+      - "**"
+jobs:
+  dagger_build:
+    name: Dagger Build and Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set keys
+        run: |
+          echo "${{secrets.QUILL_SIGN_P12}}" | base64 -d  > ./cert.p12
+          echo "${{secrets.QUILL_NOTORY_KEY}}" > ./key.p8
+          echo "QUILL_SIGN_PASSWORD=${{secrets.QUILL_SIGN_PASSWORD}}" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=${{secrets.GH_TOKEN}}" >> $GITHUB_ENV
+      
+      - name: All
+        uses: dagger/dagger-for-github@v8.2.0
+        with:
+          verb: call
+          module: ./dagger
+          args: all --output=./output --src=. --github-token=GITHUB_TOKEN --notorize-cert=./cert.p12 --notorize-cert-password=QUILL_SIGN_PASSWORD --notorize-key=./key.p8 --notorize-id=${{secrets.QUILL_NOTARY_KEY_ID}} --notorize-issuer=${{secrets.QUILL_NOTARY_ISSUER}}
+          version: "0.19.8"
+          dagger-flags: "--progress=plain"
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: archives
+          path: |
+            ./output
+  
+  release:
+    name: Create GitHub Release
+    if: ${{ github.ref == 'refs/heads/main' }}
+
+    needs: 
+      - dagger_build
+    environment:
+      name: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set keys
+        run: |
+          echo "GITHUB_TOKEN=${{secrets.GH_TOKEN}}" >> $GITHUB_ENV
+          echo "GEMFURY_TOKEN=${{secrets.FURY_TOKEN}}" >> $GITHUB_ENV
+      
+      - uses: actions/checkout@v4
+
+      - name: Download-Binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: archives
+          path: ./build_artifacts
+
+      - name: Release
+        uses: dagger/dagger-for-github@v8.2.0
+        with:
+          verb: call
+          module: ./dagger
+          args: release --src=. --github-token=GITHUB_TOKEN --gemfury-token=GEMFURY_TOKEN --archives=./build_artifacts --output=./version.txt
+          version: "0.19.8"
+          dagger-flags: "--progress=plain"
+    
+      - name: Set output
+        id: setoutput
+        run: |
+          echo "version=$(cat ./version.txt)" >> $GITHUB_OUTPUT
+
+    outputs:
+      version: ${{ steps.setoutput.outputs.version }}

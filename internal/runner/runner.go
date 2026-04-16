@@ -263,28 +263,27 @@ func runStep(
 	}
 }
 
-// BuildPrompt assembles the user prompt: knowledge hint + spec content.
-func BuildPrompt(specContent string) string {
-	return BuildPromptWithHeader(specContent, "Specification to Plan")
-}
+// PromptWithHeader is the user prompt template with a custom content section header.
+// Args: header, content.
+var PromptWithHeader = `Additional project knowledge, architectural context, and past learnings can be found in '.spektacular/knowledge/'. Use your available tools to explore this directory as needed.
 
-// BuildPlanPrompt assembles the user prompt for the planner, including the exact
-// plan directory the agent must write its output files into.
-func BuildPlanPrompt(specContent, planDir string) string {
-	var b strings.Builder
-	b.WriteString("Additional project knowledge, architectural context, and past learnings can be found in `.spektacular/knowledge/`. Use your available tools to explore this directory as needed.\n\n")
-	fmt.Fprintf(&b, "Write all plan output files to this exact directory: `%s`\n\n", planDir)
-	fmt.Fprintf(&b, "---\n\n# Specification to Plan\n\n%s", specContent)
-	return b.String()
-}
+---
 
-// BuildPromptWithHeader assembles the user prompt with a custom content section header.
-func BuildPromptWithHeader(content string, header string) string {
-	var b strings.Builder
-	b.WriteString("Additional project knowledge, architectural context, and past learnings can be found in `.spektacular/knowledge/`. Use your available tools to explore this directory as needed.\n\n")
-	fmt.Fprintf(&b, "---\n\n# %s\n\n%s", header, content)
-	return b.String()
-}
+# %s
+
+%s`
+
+// PromptPlan is the user prompt template for the planner, including the plan directory.
+// Args: planDir, specContent.
+var PromptPlan = `Additional project knowledge, architectural context, and past learnings can be found in '.spektacular/knowledge/'. Use your available tools to explore this directory as needed.
+
+Write all plan output files to this exact directory: '%s'
+
+---
+
+# Specification to Plan
+
+%s`
 
 // RunOptions holds parameters for running an agent.
 type RunOptions struct {

@@ -1,9 +1,9 @@
 package runner
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,14 +123,14 @@ func TestDetectQuestions_MultilineMarker(t *testing.T) {
 // buildPrompt tests
 // ---------------------------------------------------------------------------
 
-func TestBuildPrompt_ContainsSpecAndKnowledgeHint(t *testing.T) {
-	prompt := BuildPrompt("my spec")
+func TestPromptWithHeader_ContainsSpecAndKnowledgeHint(t *testing.T) {
+	prompt := fmt.Sprintf(PromptWithHeader, "Specification to Plan", "my spec")
 	require.Contains(t, prompt, "my spec")
 	require.Contains(t, prompt, ".spektacular/knowledge/")
 }
 
-func TestBuildPromptWithHeader_UsesCustomHeader(t *testing.T) {
-	prompt := BuildPromptWithHeader("plan content", "Implementation Plan")
+func TestPromptWithHeader_UsesCustomHeader(t *testing.T) {
+	prompt := fmt.Sprintf(PromptWithHeader, "Implementation Plan", "plan content")
 	require.Contains(t, prompt, "# Implementation Plan")
 	require.Contains(t, prompt, "plan content")
 	require.NotContains(t, prompt, "Specification to Plan")
@@ -141,8 +141,7 @@ func TestBuildPromptWithHeader_UsesCustomHeader(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewRunner_ReturnsErrorForUnknownCommand(t *testing.T) {
-	cfg := config.Config{Agent: config.AgentConfig{Command: "unknown-agent"}}
-	r, err := NewRunner(cfg)
+	r, err := NewRunner("unknown-agent")
 	require.Error(t, err)
 	require.Nil(t, r)
 	require.Contains(t, err.Error(), "unsupported runner")
@@ -150,7 +149,6 @@ func TestNewRunner_ReturnsErrorForUnknownCommand(t *testing.T) {
 }
 
 func TestNewRunner_ReturnsRunnerForRegisteredCommand(t *testing.T) {
-	// Register a test runner.
 	Register("test-runner", func() Runner {
 		return &stubRunner{}
 	})
@@ -158,8 +156,7 @@ func TestNewRunner_ReturnsRunnerForRegisteredCommand(t *testing.T) {
 		delete(registry, "test-runner")
 	}()
 
-	cfg := config.Config{Agent: config.AgentConfig{Command: "test-runner"}}
-	r, err := NewRunner(cfg)
+	r, err := NewRunner("test-runner")
 	require.NoError(t, err)
 	require.NotNil(t, r)
 }

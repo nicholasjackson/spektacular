@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/jumppad-labs/spektacular/internal/config"
-	"github.com/jumppad-labs/spektacular/internal/defaults"
+	"github.com/jumppad-labs/spektacular/templates"
 )
 
 // Init creates the .spektacular directory structure in projectPath.
@@ -35,14 +35,17 @@ func Init(projectPath string, force bool) error {
 		}
 	}
 
-	// Write default config.yaml
-	cfg := config.NewDefault()
-	if err := cfg.ToYAMLFile(filepath.Join(spektacularDir, "config.yaml")); err != nil {
-		return fmt.Errorf("writing config: %w", err)
+	// Write default config.yaml only if it does not already exist.
+	configPath := filepath.Join(spektacularDir, "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		cfg := config.NewDefault()
+		if err := cfg.ToYAMLFile(configPath); err != nil {
+			return fmt.Errorf("writing config: %w", err)
+		}
 	}
 
 	// Write embedded .gitignore
-	gitignoreContent, err := defaults.ReadFile(".gitignore")
+	gitignoreContent, err := templates.FS.ReadFile(".spektacular/.gitignore")
 	if err != nil {
 		return fmt.Errorf("reading embedded .gitignore: %w", err)
 	}
@@ -51,7 +54,7 @@ func Init(projectPath string, force bool) error {
 	}
 
 	// Write embedded conventions.md
-	conventionsContent, err := defaults.ReadFile("conventions.md")
+	conventionsContent, err := templates.FS.ReadFile(".spektacular/conventions.md")
 	if err != nil {
 		return fmt.Errorf("reading embedded conventions.md: %w", err)
 	}

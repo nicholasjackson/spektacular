@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "tessl": {
+      "command": "tessl",
+      "args": ["mcp","start"],
+      "disabled": false
+    }
+  }
+}

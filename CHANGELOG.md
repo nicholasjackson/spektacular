@@ -1,0 +1,3 @@
+## 18_release_workflow
+
+Spektacular now has a complete automated release pipeline powered by Dagger and GitHub Actions. Every push to any branch builds cross-platform binaries (darwin/linux on amd64/arm64) with automatic macOS code signing and notarization. Merging to `main` with a `release/patch|minor|major` PR label automatically publishes a new release to GitHub Releases, updates the Homebrew formula in `jumppad-labs/homebrew-repo`, and pushes packages to GemFury. Users can now install spektacular via `brew install jumppad-labs/repo/spektacular` or download signed binaries directly from GitHub Releases, eliminating the need to clone and build from source.
