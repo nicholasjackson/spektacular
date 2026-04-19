@@ -1,21 +1,11 @@
 {
-  "current_step": "finished",
+  "current_step": "overview",
   "completed_steps": [
-    "new",
-    "overview",
-    "requirements",
-    "acceptance_criteria",
-    "constraints",
-    "technical_approach",
-    "success_metrics",
-    "non_goals",
-    "verification",
-    "finished"
+    "new"
   ],
-  "created_at": "2026-04-16T16:59:28.721109303Z",
-  "updated_at": "2026-04-16T17:08:51.613432566Z",
+  "created_at": "2026-04-19T17:02:31.870898072Z",
+  "updated_at": "2026-04-19T17:02:31.871201179Z",
   "data": {
-    "name": "19_codex_integration",
-    "spec_template": "# Feature: 19_codex_integration\n\n## Overview\n\nSpektacular will separate its agent-facing interface into two distinct layers — commands (for agents like Claude Code and Bob that support custom slash commands) and skills (instruction files that work across all agents). Each supported agent will have a defined integration interface capturing install details and invocation method. This enables Spektacular to ship Codex support out of the box, while also making it straightforward to add future agent integrations. Development teams benefit regardless of which AI coding agent they use — they get the same Spec Driven Development workflow everywhere.\n\n## Requirements\n\n- **Agent init command** — Users can run `spektacular init \u003cagent\u003e` to install the Spektacular integration for a specific agent (e.g. `codex`, `claude`, `bob`)\n- **Agent-appropriate artefacts** — Each agent integration installs the appropriate artefacts for that agent (commands, skills, or both) based on what the agent supports\n- **Commands and skills separation** — The system must separate agent-facing artefacts into commands and skills, where skills work across all agents\n- **Agent integration interface** — Each agent must have a defined integration interface that captures its install behaviour and invocation method\n- **Extensibility** — Adding support for a new agent requires only implementing that agent's integration — no changes to core workflow logic\n- **Codex integration** — A new Codex integration must be implemented using the agent integration interface\n\n## Constraints\n\nNo constraints. Breaking changes are acceptable.\n\n## Acceptance Criteria\n\n- **Init succeeds** — Running `spektacular init codex` (or `claude`, `bob`) completes without error and the expected artefacts are present on disk afterward\n- **Artefact correctness** — After `init`, only artefacts valid for that agent exist (e.g. Codex gets skills but not Claude Code commands)\n- **Artefact separation** — The installed artefacts for an agent that supports both commands and skills are split into distinct files for each type\n- **Unknown agent error** — Every supported agent has a working integration; attempting to init an unsupported agent name returns a clear error\n- **Isolated extensibility** — A new agent can be integrated by adding a single new implementation; existing agent integrations and workflow logic are unchanged\n- **Codex workflow invocation** — After `spektacular init codex`, a Codex user can invoke spec, plan, and implement workflows using skill syntax (e.g. `$spek-plan`) without error\n\n## Technical Approach\n\n- Define an `Agent` interface in Go that each integration (Claude, Bob, Codex) implements, capturing install behaviour and the artefact types it supports\n- Skills are markdown instruction files installable by any agent integration\n- Commands are the existing Claude Code / Bob slash command format, only installed by agents that support them\n- The `init` command dispatches to the appropriate `Agent` implementation based on the argument provided\n- Codex skills use `$skill-name` invocation syntax and are installed into the path Codex expects (`.codex/skills/`)\n\n## Success Metrics\n\nManual testing by the developer after delivery.\n\n## Non-Goals\n\nNone defined.\n"
+    "name": "testing"
   }
 }

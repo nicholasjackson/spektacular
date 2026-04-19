@@ -1,11 +1,11 @@
 ---
-description: Create a new Specification
-argument-hint: <spec-name>
+name: spek-new
+description: Create a new Specification for a feature.
 ---
 
-# What this command does
+# What this skill does
 
-This command drives a **multi-step interactive workflow** that produces a complete specification file in `.spektacular/specs/<name>.md`. The workflow is owned by the `{{command}}` CLI, not by you — the CLI is the state machine and you are the executor.
+This skill drives a **multi-step interactive workflow** that produces a complete specification file in `.spektacular/specs/<name>.md`. The workflow is owned by the `go run .` CLI, not by you — the CLI is the state machine and you are the executor.
 
 On each turn, the CLI returns JSON containing an `instruction` field. That instruction describes exactly one step (e.g. overview, requirements, acceptance criteria, …). You must:
 
@@ -25,7 +25,7 @@ If no spec name was provided, ask the user for one before proceeding.
 Start the spec workflow by running:
 
 ```
-{{command}} spec new --data '{"name": "<spec_name>"}'
+go run . spec new --data '{"name": "<spec_name>"}'
 ```
 
-This creates the spec file and state file automatically and returns the first `instruction`. From that point on, follow the loop above: do what the instruction says, then call `{{command}} spec goto --data '{"step":"<next_step>"}'` to get the next one. Do not invent step names — every instruction tells you the exact `goto` command to run next.
+This creates the spec file and state file automatically and returns the first `instruction`. From that point on, follow the loop above: do what the instruction says, then call `go run . spec goto --data '{"step":"<next_step>"}'` to get the next one. Do not invent step names — every instruction tells you the exact `goto` command to run next.
