@@ -1,11 +1,11 @@
 ---
-description: Execute an approved Plan to implement the feature
-argument-hint: <plan-name>
+name: spek-implement
+description: Execute an approved Plan to implement the feature.
 ---
 
-# What this command does
+# What this skill does
 
-This command drives a **multi-step interactive workflow** that executes an approved plan in `.spektacular/plans/<name>/plan.md`, producing working code, tests, and a changelog. The workflow is owned by the `{{command}}` CLI, not by you — the CLI is the state machine and you are the executor.
+This skill drives a **multi-step interactive workflow** that executes an approved plan in `.spektacular/plans/<name>/plan.md`, producing working code, tests, and a changelog. The workflow is owned by the `{{command}}` CLI, not by you — the CLI is the state machine and you are the executor.
 
 On each turn, the CLI returns JSON containing an `instruction` field. That instruction describes exactly one step (e.g. analyze, implement a phase, verify, update changelog, …). You must:
 

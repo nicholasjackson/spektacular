@@ -1,20 +1,11 @@
 {
-  "current_step": "finished",
+  "current_step": "overview",
   "completed_steps": [
-    "new",
-    "read_plan",
-    "analyze",
-    "implement",
-    "test",
-    "verify",
-    "update_plan",
-    "update_changelog",
-    "update_repo_changelog",
-    "finished"
+    "new"
   ],
-  "created_at": "2026-04-16T07:06:17.283395601Z",
-  "updated_at": "2026-04-16T08:26:01.832626411Z",
+  "created_at": "2026-04-19T17:02:31.870898072Z",
+  "updated_at": "2026-04-19T17:02:31.871201179Z",
   "data": {
-    "name": "18_release_workflow"
+    "name": "testing"
   }
 }
