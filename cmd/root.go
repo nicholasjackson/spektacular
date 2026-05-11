@@ -66,4 +66,5 @@ func init() {
 	rootCmd.AddCommand(implementCmd)
 	rootCmd.AddCommand(skillCmd)
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(notionCmd)
 }

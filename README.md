@@ -124,6 +124,7 @@ Running `spektacular init <agent>` creates:
 ├── config.yaml              # CLI command, agent, debug, and spec ID settings
 ├── specs/                   # Your specification files
 ├── plans/                   # Generated plans (plan.md, research.md, context.md)
+├── cache/notion/            # Ignored Notion-backed working cache, when enabled
 └── knowledge/               # Project knowledge base
     ├── conventions.md       # Code style and standards
     ├── architecture/        # System design docs
@@ -145,6 +146,12 @@ debug:
 spec:
   id_method: timestamp
   counter: 0
+artifacts:
+  backend: local
+  cache_dir: cache/notion
+  notion:
+    spec_id_property: "Spec ID"
+    plan_id_property: "Plan ID"
 ```
 
 `spec.id_method` controls the prefix used for new spec filenames:
@@ -154,6 +161,47 @@ spec:
 - `external`: requires an `id` in `spec new --data`; useful when another system owns the identifier.
 
 Names and ids are normalized to lowercase, with accepted separators such as `.`, `@`, `-`, and internal whitespace converted to hyphens. Leading or trailing whitespace, path separators, and control characters are rejected.
+
+`artifacts.backend` controls where specs and plans live:
+
+- `local` (default): uses `.spektacular/specs` and `.spektacular/plans`.
+- `notion`: uses linked Notion data sources and an ignored local cache under `.spektacular/cache/notion`.
+
+Notion mode requires `spec.id_method: external`. The external ID comes from the Notion `Spec ID` auto-increment property. Plans use a required `Plan ID` auto-increment property.
+
+### Notion mode
+
+The binary does not call Notion directly. Agents use Notion MCP to fetch, create, and update pages, then pass normalized snapshots or remote metadata to Spektacular.
+
+To create new Notion databases, ask the CLI for MCP instructions:
+
+```bash
+spektacular notion init --data '{"base_page_url":"https://www.notion.so/..."}'
+```
+
+To link existing databases, fetch both data sources with Notion MCP and pass the snapshots:
+
+```bash
+spektacular notion link --data '{"specs":{...},"plans":{...}}'
+```
+
+`notion link` validates the same schema rules as `notion doctor`. If fixable or blocking issues exist, it reports them and does not write config. Use doctor to inspect and prepare repairs:
+
+```bash
+spektacular notion doctor --data '{"specs":{...},"plans":{...}}'
+spektacular notion doctor --apply --approve-additive --data '{"specs":{...},"plans":{...}}'
+```
+
+Doctor repairs are safe additive schema changes only, and require explicit approval. Apply the returned `notion_update_data_source` instructions through Notion MCP, fetch fresh snapshots, then run `notion link` again.
+
+Agents keep a local working cache in `.spektacular/cache/notion`. Use `notion cache pull` after MCP fetches, `notion cache prepare-push` before MCP updates, `notion cache commit-push` after a successful MCP update, and `notion cache resolve-merge` when a remote page changed since the local baseline.
+
+```bash
+spektacular notion cache pull --data '{"kind":"spec","name":"<spec_name>","content":"<markdown>","remote":{"notion_url":"<page_url>","page_id":"<page_id>","data_source_url":"<collection_url>","external_id":"<spec_id>","remote_version":"<last_edited_time>"}}'
+spektacular notion cache prepare-push --data '{"kind":"spec","name":"<spec_name>","remote_version":"<latest_last_edited_time>","remote_content":"<latest_markdown>"}'
+```
+
+If `prepare-push` returns `merge_required`, present the returned baseline, local, and remote content to the user or agent. Do not overwrite Notion until `resolve-merge` records resolved content and a retry returns `ready`.
 
 ## Roadmap
 
@@ -229,6 +277,11 @@ tests/harbor/jobs/<timestamp>/
 | Task | Description |
 |---|---|
 | `tests/harbor/spec-workflow` | Full spec creation workflow through all 10 steps |
+
+Local unit and command tests cover both artifact backends:
+
+- Local workflow compatibility remains covered by the existing spec, plan, implement, and Harbor workflow tests.
+- Notion mode coverage includes config validation, schema link/doctor reports, cache pull/push/merge contracts, conflict output, and Notion-backed workflow startup/cache behavior.
 
 ## Building from Source
 

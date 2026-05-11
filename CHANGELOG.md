@@ -1,3 +1,7 @@
+## 20260509154708-notion-artifact-sync
+
+Spektacular can now be configured to keep specs and plans in linked Notion databases while agents work through an ignored local cache. The new Notion setup, doctor, cache, pull, push, commit, and merge commands give agents a structured MCP workflow for validating databases, using external Notion IDs, syncing changed artifacts, and surfacing conflicts before overwriting another user's work. Local filesystem projects remain the default and continue to use the existing specs and plans layout.
+
 ## spec-id-prefix-method
 
 Spec creation now uses CLI-owned identifier prefixes. By default, `spec new` creates timestamp-prefixed spec names, accepts an optional `id` for external systems, and can be configured with `spec.id_method: timestamp`, `counter`, or `external`. Callers should use the returned `spec_name` and `spec_path` because requested names and ids are normalized before workflow state and files are created.

@@ -14,6 +14,13 @@ const (
 	SpecIDMethodTimestamp = "timestamp"
 	SpecIDMethodCounter   = "counter"
 	SpecIDMethodExternal  = "external"
+
+	ArtifactBackendLocal  = "local"
+	ArtifactBackendNotion = "notion"
+
+	DefaultNotionCacheDir     = "cache/notion"
+	DefaultSpecIDPropertyName = "Spec ID"
+	DefaultPlanIDPropertyName = "Plan ID"
 )
 
 // DebugConfig holds debug logging configuration.
@@ -27,12 +34,29 @@ type SpecConfig struct {
 	Counter  int    `yaml:"counter"`
 }
 
+// ArtifactsConfig holds configuration for Spektacular artifact storage.
+type ArtifactsConfig struct {
+	Backend  string       `yaml:"backend"`
+	CacheDir string       `yaml:"cache_dir"`
+	Notion   NotionConfig `yaml:"notion"`
+}
+
+// NotionConfig holds configuration for linked Notion artifact databases.
+type NotionConfig struct {
+	BasePageURL     string `yaml:"base_page_url"`
+	SpecsDataSource string `yaml:"specs_data_source"`
+	PlansDataSource string `yaml:"plans_data_source"`
+	SpecIDProperty  string `yaml:"spec_id_property"`
+	PlanIDProperty  string `yaml:"plan_id_property"`
+}
+
 // Config is the top-level Spektacular configuration.
 type Config struct {
-	Command string      `yaml:"command"`
-	Agent   string      `yaml:"agent"`
-	Debug   DebugConfig `yaml:"debug"`
-	Spec    SpecConfig  `yaml:"spec"`
+	Command   string          `yaml:"command"`
+	Agent     string          `yaml:"agent"`
+	Debug     DebugConfig     `yaml:"debug"`
+	Spec      SpecConfig      `yaml:"spec"`
+	Artifacts ArtifactsConfig `yaml:"artifacts"`
 }
 
 // NewDefault returns a Config populated with default values.
@@ -45,6 +69,14 @@ func NewDefault() Config {
 		Spec: SpecConfig{
 			IDMethod: SpecIDMethodTimestamp,
 			Counter:  0,
+		},
+		Artifacts: ArtifactsConfig{
+			Backend:  ArtifactBackendLocal,
+			CacheDir: DefaultNotionCacheDir,
+			Notion: NotionConfig{
+				SpecIDProperty: DefaultSpecIDPropertyName,
+				PlanIDProperty: DefaultPlanIDPropertyName,
+			},
 		},
 	}
 }
@@ -73,6 +105,9 @@ func (c Config) Validate() error {
 	if err := c.Spec.Validate(); err != nil {
 		return err
 	}
+	if err := c.Artifacts.Validate(c.Spec); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -84,6 +119,45 @@ func (c SpecConfig) Validate() error {
 	default:
 		return fmt.Errorf("spec.id_method must be one of %q, %q, or %q", SpecIDMethodTimestamp, SpecIDMethodCounter, SpecIDMethodExternal)
 	}
+}
+
+// Validate checks whether the artifact config contains supported values.
+func (c ArtifactsConfig) Validate(spec SpecConfig) error {
+	backend := c.Backend
+	if backend == "" {
+		backend = ArtifactBackendLocal
+	}
+
+	switch backend {
+	case ArtifactBackendLocal:
+		return nil
+	case ArtifactBackendNotion:
+		return c.validateNotion(spec)
+	default:
+		return fmt.Errorf("artifacts.backend must be one of %q or %q", ArtifactBackendLocal, ArtifactBackendNotion)
+	}
+}
+
+func (c ArtifactsConfig) validateNotion(spec SpecConfig) error {
+	if spec.IDMethod != SpecIDMethodExternal {
+		return fmt.Errorf("spec.id_method must be %q when artifacts.backend is %q", SpecIDMethodExternal, ArtifactBackendNotion)
+	}
+	if c.CacheDir == "" {
+		return fmt.Errorf("artifacts.cache_dir is required when artifacts.backend is %q", ArtifactBackendNotion)
+	}
+	if c.Notion.SpecsDataSource == "" {
+		return fmt.Errorf("artifacts.notion.specs_data_source is required when artifacts.backend is %q", ArtifactBackendNotion)
+	}
+	if c.Notion.PlansDataSource == "" {
+		return fmt.Errorf("artifacts.notion.plans_data_source is required when artifacts.backend is %q", ArtifactBackendNotion)
+	}
+	if c.Notion.SpecIDProperty == "" {
+		return fmt.Errorf("artifacts.notion.spec_id_property is required when artifacts.backend is %q", ArtifactBackendNotion)
+	}
+	if c.Notion.PlanIDProperty == "" {
+		return fmt.Errorf("artifacts.notion.plan_id_property is required when artifacts.backend is %q", ArtifactBackendNotion)
+	}
+	return nil
 }
 
 // ToYAMLFile writes the Config to a YAML file.

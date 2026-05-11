@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jumppad-labs/spektacular/internal/artifact"
+	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/output"
 	"github.com/jumppad-labs/spektacular/internal/steps/spec"
 	"github.com/jumppad-labs/spektacular/internal/store"
@@ -167,8 +169,9 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("--data is required (e.g. --data '{\"name\":\"my-feature\"}')")
 	}
 	var input struct {
-		Name string `json:"name"`
-		ID   string `json:"id"`
+		Name   string                  `json:"name"`
+		ID     string                  `json:"id"`
+		Remote artifact.RemoteMetadata `json:"remote"`
 	}
 	if err := json.Unmarshal([]byte(dataStr), &input); err != nil {
 		return fmt.Errorf("parsing --data: %w", err)
@@ -181,6 +184,14 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
+	}
+	if cfg.Artifacts.Backend == config.ArtifactBackendNotion {
+		if err := artifact.ValidateRemoteMetadata(input.Remote); err != nil {
+			return err
+		}
+		if input.ID == "" {
+			input.ID = input.Remote.ExternalID
+		}
 	}
 
 	st := store.NewFileStore(dataDir)
@@ -219,7 +230,7 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 		_ = os.Remove(statePath)
 	}
 
-	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun, Project: cfg}
 	steps := spec.Steps()
 	out := output.New(cmd.OutOrStdout(), globalFields)
 	wf := workflow.New(steps, statePath, wfCfg, st, out)
@@ -229,6 +240,9 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	wf.SetData("name", resolved.Name)
+	if cfg.Artifacts.Backend == config.ArtifactBackendNotion {
+		wf.SetData("remote", input.Remote)
+	}
 
 	if err := wf.Next(); err != nil {
 		return output.WriteError(cmd.ErrOrStderr(), err)
@@ -275,7 +289,7 @@ func runSpecGoto(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun, Project: cfg}
 	steps := spec.Steps()
 	out := output.New(cmd.OutOrStdout(), globalFields)
 	wf := workflow.New(steps, stateFilePath(dataDir), wfCfg, store.NewFileStore(dataDir), out)

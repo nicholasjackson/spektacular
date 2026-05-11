@@ -123,6 +123,7 @@ func TestInit_Codex(t *testing.T) {
 		require.NoError(t, err, "expected skill file %s to exist", skillPath)
 		require.Contains(t, string(data), expected)
 		require.NotContains(t, string(data), "{{command}}")
+		require.Contains(t, string(data), "notion status")
 	}
 
 	// Codex has no per-repo slash-command mechanism — no command wrappers or
