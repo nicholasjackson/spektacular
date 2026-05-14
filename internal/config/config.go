@@ -24,7 +24,6 @@ type DebugConfig struct {
 // SpecConfig holds configuration for specification creation.
 type SpecConfig struct {
 	IDMethod string `yaml:"id_method"`
-	Counter  int    `yaml:"counter"`
 }
 
 // Config is the top-level Spektacular configuration.
@@ -44,7 +43,6 @@ func NewDefault() Config {
 		},
 		Spec: SpecConfig{
 			IDMethod: SpecIDMethodTimestamp,
-			Counter:  0,
 		},
 	}
 }

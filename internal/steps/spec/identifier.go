@@ -1,7 +1,10 @@
 package spec
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -9,6 +12,8 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/store"
 )
+
+var counterPrefixRE = regexp.MustCompile(`^(\d{6})_`)
 
 const (
 	IDMethodTimestamp = config.SpecIDMethodTimestamp
@@ -20,18 +25,16 @@ const (
 
 // IdentifierRequest describes the data needed to resolve a canonical spec name.
 type IdentifierRequest struct {
-	Name    string
-	ID      string
-	Method  string
-	Counter int
-	Store   store.Store
-	Now     func() time.Time
+	Name   string
+	ID     string
+	Method string
+	Store  store.Store
+	Now    func() time.Time
 }
 
-// IdentifierResult is the canonical spec name and any updated counter state.
+// IdentifierResult is the canonical spec name.
 type IdentifierResult struct {
-	Name    string
-	Counter int
+	Name string
 }
 
 // ResolveIdentifier turns a requested spec name plus optional id into a
@@ -59,7 +62,7 @@ func ResolveIdentifier(req IdentifierRequest) (IdentifierResult, error) {
 		if err != nil {
 			return IdentifierResult{}, err
 		}
-		return IdentifierResult{Name: resolved, Counter: req.Counter}, nil
+		return IdentifierResult{Name: resolved}, nil
 	}
 
 	switch method {
@@ -140,25 +143,60 @@ func resolveTimestamp(req IdentifierRequest, name string) (IdentifierResult, err
 			return IdentifierResult{}, err
 		}
 		if !exists {
-			return IdentifierResult{Name: resolved, Counter: req.Counter}, nil
+			return IdentifierResult{Name: resolved}, nil
 		}
 		timestamp = timestamp.Add(time.Second)
 	}
 }
 
 func resolveCounter(req IdentifierRequest, name string) (IdentifierResult, error) {
-	counter := req.Counter + 1
+	next, err := nextCounterFromStore(req.Store)
+	if err != nil {
+		return IdentifierResult{}, err
+	}
 	for {
-		resolved := fmt.Sprintf("%06d-%s", counter, name)
+		resolved := fmt.Sprintf("%06d_%s", next, name)
 		exists, err := specExists(req.Store, resolved)
 		if err != nil {
 			return IdentifierResult{}, err
 		}
 		if !exists {
-			return IdentifierResult{Name: resolved, Counter: counter}, nil
+			return IdentifierResult{Name: resolved}, nil
 		}
-		counter++
+		next++
 	}
+}
+
+// nextCounterFromStore scans the specs directory for filenames whose names
+// start with `<digits>-` and returns max+1. Returns 1 when no such files
+// exist (or the directory does not yet exist).
+func nextCounterFromStore(st store.Store) (int, error) {
+	if st == nil {
+		return 0, fmt.Errorf("store required for spec identifier resolution")
+	}
+	entries, err := st.List("specs")
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return 1, nil
+		}
+		return 0, err
+	}
+	max := 0
+	for _, name := range entries {
+		base := strings.TrimSuffix(name, ".md")
+		m := counterPrefixRE.FindStringSubmatch(base)
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		if n > max {
+			max = n
+		}
+	}
+	return max + 1, nil
 }
 
 func resolveWithPrefix(st store.Store, prefix, name string) (string, error) {

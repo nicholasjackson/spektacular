@@ -43,7 +43,6 @@ func TestInit_CreatesConfigFile(t *testing.T) {
 	cfg, err := config.FromYAMLFile(configPath)
 	require.NoError(t, err)
 	require.Equal(t, "timestamp", cfg.Spec.IDMethod)
-	require.Equal(t, 0, cfg.Spec.Counter)
 }
 
 func TestInit_CreatesGitignore(t *testing.T) {

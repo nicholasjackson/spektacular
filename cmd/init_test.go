@@ -165,7 +165,6 @@ func TestInit_CustomCommand(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "go run .", cfg.Command)
 	require.Equal(t, "timestamp", cfg.Spec.IDMethod)
-	require.Equal(t, 0, cfg.Spec.Counter)
 
 	skillPath := filepath.Join(dir, ".claude", "skills", "spek-new", "SKILL.md")
 	skillData, err := os.ReadFile(skillPath)

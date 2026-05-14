@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/jumppad-labs/spektacular/internal/steps/spec"
 	"github.com/stretchr/testify/require"
 )
@@ -125,17 +124,13 @@ func TestSpecNew_TimestampCollisionBumpsSeconds(t *testing.T) {
 func TestSpecNew_ExplicitIDOverridesGeneratedMethod(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n  counter: 7\n")
+	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n")
 
 	result, err := runSpecNewForTest(t, "--data", `{"name":"Billing Export","id":"EXT.User@123"}`)
 	require.NoError(t, err)
 
 	require.Equal(t, "ext-user-123-billing-export", result.SpecName)
 	require.FileExists(t, result.SpecPath)
-
-	cfg, err := config.FromYAMLFile(filepath.Join(dir, ".spektacular", "config.yaml"))
-	require.NoError(t, err)
-	require.Equal(t, 7, cfg.Spec.Counter)
 }
 
 func TestSpecNew_ExternalModeWithIDCreatesSpec(t *testing.T) {
@@ -163,56 +158,47 @@ func TestSpecNew_ExternalModeRequiresIDWithoutSideEffects(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(dataDir, "state.json"))
 }
 
-func TestSpecNew_CounterModePersistsAdvancedCounter(t *testing.T) {
+func TestSpecNew_CounterModeUsesNextValueFromStore(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n  counter: 7\n")
+	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n")
+	writeSpecCommandFile(t, dir, "000007_old-feature")
 
 	result, err := runSpecNewForTest(t, "--data", `{"name":"billing-export"}`)
 	require.NoError(t, err)
 
-	require.Equal(t, "000008-billing-export", result.SpecName)
+	require.Equal(t, "000008_billing-export", result.SpecName)
 	require.FileExists(t, result.SpecPath)
-
-	cfg, err := config.FromYAMLFile(filepath.Join(dir, ".spektacular", "config.yaml"))
-	require.NoError(t, err)
-	require.Equal(t, 8, cfg.Spec.Counter)
 }
 
-func TestSpecNew_StaleCounterCollisionPersistsBumpedCounter(t *testing.T) {
+func TestSpecNew_CounterModeCollisionBumpsValue(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
-	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n  counter: 7\n")
-	writeSpecCommandFile(t, dir, "000008-billing-export")
+	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n")
+	writeSpecCommandFile(t, dir, "000007_old-feature")
+	writeSpecCommandFile(t, dir, "000008_billing-export")
 
 	result, err := runSpecNewForTest(t, "--data", `{"name":"billing-export"}`)
 	require.NoError(t, err)
 
-	require.Equal(t, "000009-billing-export", result.SpecName)
+	require.Equal(t, "000009_billing-export", result.SpecName)
 	require.FileExists(t, result.SpecPath)
-
-	cfg, err := config.FromYAMLFile(filepath.Join(dir, ".spektacular", "config.yaml"))
-	require.NoError(t, err)
-	require.Equal(t, 9, cfg.Spec.Counter)
 }
 
 func TestSpecNew_DryRunReportsCanonicalNameWithoutWrites(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	dataDir := filepath.Join(dir, ".spektacular")
-	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n  counter: 7\n")
+	writeSpecCommandConfig(t, dir, "spec:\n  id_method: counter\n")
+	writeSpecCommandFile(t, dir, "000007_old-feature")
 
 	result, err := runSpecNewForTest(t, "--dry-run", "--data", `{"name":"billing-export"}`)
 	require.NoError(t, err)
 
-	require.Equal(t, "000008-billing-export", result.SpecName)
-	require.Equal(t, filepath.Join(dataDir, "specs", "000008-billing-export.md"), result.SpecPath)
+	require.Equal(t, "000008_billing-export", result.SpecName)
+	require.Equal(t, filepath.Join(dataDir, "specs", "000008_billing-export.md"), result.SpecPath)
 	require.NoFileExists(t, result.SpecPath)
 	require.NoFileExists(t, filepath.Join(dataDir, "state.json"))
-
-	cfg, err := config.FromYAMLFile(filepath.Join(dataDir, "config.yaml"))
-	require.NoError(t, err)
-	require.Equal(t, 7, cfg.Spec.Counter)
 }
 
 func TestSpecNew_ValidationFailuresLeaveNoSpecOrState(t *testing.T) {

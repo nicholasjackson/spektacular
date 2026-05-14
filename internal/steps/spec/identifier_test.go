@@ -33,7 +33,6 @@ func TestResolveIdentifier_DefaultTimestamp(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "20260509010203-billing-export", got.Name)
-	require.Equal(t, 0, got.Counter)
 }
 
 func TestResolveIdentifier_TimestampCollisionBumpsSeconds(t *testing.T) {
@@ -49,7 +48,6 @@ func TestResolveIdentifier_TimestampCollisionBumpsSeconds(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "20260509010204-billing-export", got.Name)
-	require.Equal(t, 0, got.Counter)
 }
 
 func TestResolveIdentifier_ExplicitTimestampMethod(t *testing.T) {
@@ -66,51 +64,76 @@ func TestResolveIdentifier_ExplicitTimestampMethod(t *testing.T) {
 	require.Equal(t, "20260509010203-billing-export", got.Name)
 }
 
-func TestResolveIdentifier_CounterUsesNextValue(t *testing.T) {
+func TestResolveIdentifier_CounterEmptyStoreStartsAtOne(t *testing.T) {
 	st := identifierStore(t)
 
 	got, err := ResolveIdentifier(IdentifierRequest{
-		Name:    "billing-export",
-		Method:  IDMethodCounter,
-		Counter: 7,
-		Store:   st,
+		Name:   "billing-export",
+		Method: IDMethodCounter,
+		Store:  st,
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "000008-billing-export", got.Name)
-	require.Equal(t, 8, got.Counter)
+	require.Equal(t, "000001_billing-export", got.Name)
+}
+
+func TestResolveIdentifier_CounterUsesMaxFromStorePlusOne(t *testing.T) {
+	st := identifierStore(t)
+	writeExistingSpec(t, st, "000007_old-feature")
+
+	got, err := ResolveIdentifier(IdentifierRequest{
+		Name:   "billing-export",
+		Method: IDMethodCounter,
+		Store:  st,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "000008_billing-export", got.Name)
+}
+
+func TestResolveIdentifier_CounterIgnoresTimestampAndExternalPrefixes(t *testing.T) {
+	st := identifierStore(t)
+	writeExistingSpec(t, st, "000003_old-feature")
+	writeExistingSpec(t, st, "20260509010203-other-feature")
+	writeExistingSpec(t, st, "ext-123-external")
+
+	got, err := ResolveIdentifier(IdentifierRequest{
+		Name:   "billing-export",
+		Method: IDMethodCounter,
+		Store:  st,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "000004_billing-export", got.Name)
 }
 
 func TestResolveIdentifier_CounterCollisionBumpsValue(t *testing.T) {
 	st := identifierStore(t)
-	writeExistingSpec(t, st, "000008-billing-export")
+	writeExistingSpec(t, st, "000007_old-feature")
+	writeExistingSpec(t, st, "000008_billing-export")
 
 	got, err := ResolveIdentifier(IdentifierRequest{
-		Name:    "billing-export",
-		Method:  IDMethodCounter,
-		Counter: 7,
-		Store:   st,
+		Name:   "billing-export",
+		Method: IDMethodCounter,
+		Store:  st,
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "000009-billing-export", got.Name)
-	require.Equal(t, 9, got.Counter)
+	require.Equal(t, "000009_billing-export", got.Name)
 }
 
 func TestResolveIdentifier_ExplicitIDOverridesGeneratedMethod(t *testing.T) {
 	st := identifierStore(t)
 
 	got, err := ResolveIdentifier(IdentifierRequest{
-		Name:    "Billing Export",
-		ID:      "EXT.User@123",
-		Method:  IDMethodCounter,
-		Counter: 7,
-		Store:   st,
+		Name:   "Billing Export",
+		ID:     "EXT.User@123",
+		Method: IDMethodCounter,
+		Store:  st,
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, "ext-user-123-billing-export", got.Name)
-	require.Equal(t, 7, got.Counter)
 }
 
 func TestResolveIdentifier_ExplicitIDCollisionFails(t *testing.T) {

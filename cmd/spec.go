@@ -190,26 +190,14 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 	}
 
 	resolved, err := spec.ResolveIdentifier(spec.IdentifierRequest{
-		Name:    input.Name,
-		ID:      input.ID,
-		Method:  cfg.Spec.IDMethod,
-		Counter: cfg.Spec.Counter,
-		Store:   st,
-		Now:     specIdentifierNow,
+		Name:   input.Name,
+		ID:     input.ID,
+		Method: cfg.Spec.IDMethod,
+		Store:  st,
+		Now:    specIdentifierNow,
 	})
 	if err != nil {
 		return err
-	}
-
-	if !dryRun && resolved.Counter != cfg.Spec.Counter {
-		cfg.Spec.Counter = resolved.Counter
-		cfgPath, err := configFilePath()
-		if err != nil {
-			return err
-		}
-		if err := cfg.ToYAMLFile(cfgPath); err != nil {
-			return fmt.Errorf("writing config: %w", err)
-		}
 	}
 
 	statePath := stateFilePath(dataDir)
