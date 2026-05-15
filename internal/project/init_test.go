@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jumppad-labs/spektacular/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,6 +39,10 @@ func TestInit_CreatesConfigFile(t *testing.T) {
 	configPath := filepath.Join(dir, ".spektacular", "config.yaml")
 	_, err = os.Stat(configPath)
 	require.NoError(t, err, "config.yaml should exist")
+
+	cfg, err := config.FromYAMLFile(configPath)
+	require.NoError(t, err)
+	require.Equal(t, "timestamp", cfg.Spec.IDMethod)
 }
 
 func TestInit_CreatesGitignore(t *testing.T) {

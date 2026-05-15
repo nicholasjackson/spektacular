@@ -8,18 +8,18 @@ The binary is already installed at `/usr/local/bin/spektacular`.
 First initialize the project:
 
 ```bash
-spektacular init claude
+spektacular init {{agent}}
 ```
 
 ## Task
 
 Create a specification for a **user authentication feature using JWT tokens** by
-using the `/spek:new` skill that was installed during init.
+using the `spek-new` skill that was installed during init.
 
 Run the skill:
 
 ```
-/spek:new user-auth
+{{spek_new}}
 ```
 
 The skill will guide you through the full spec workflow. Follow each instruction
@@ -44,5 +44,5 @@ cp -r /app/.spektacular /logs/artifacts/spektacular
 
 - The workflow reaches the `finished` or `done` state
 - All steps appear in the completed_steps list
-- The spec file at `.spektacular/specs/user-auth.md` contains content
+- The created spec file under `.spektacular/specs/` contains content
 - Each spec section has meaningful, non-placeholder text
