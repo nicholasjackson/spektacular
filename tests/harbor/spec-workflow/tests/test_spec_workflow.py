@@ -147,6 +147,87 @@ def find_spektacular_calls(tool_calls: list[dict]) -> list[str]:
     return results
 
 
+def iter_transcript_objects():
+    """Yield every JSON object across all agent transcripts, in order."""
+    for transcript in sorted(AGENT_LOG_DIR.glob("*.txt")):
+        for line in transcript.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                yield json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+
+def agent_result_events() -> list[dict]:
+    """Return all `result`-type events from the transcript, in order."""
+    return [o for o in iter_transcript_objects() if o.get("type") == "result"]
+
+
+def agent_auth_failure():
+    """Return the first transcript object signalling an Anthropic API
+    authentication failure (HTTP 401), or None if there is none."""
+    for obj in iter_transcript_objects():
+        if obj.get("error") == "authentication_failed":
+            return obj
+        if obj.get("api_error_status") == 401:
+            return obj
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Agent-execution preflight — runs first
+# ---------------------------------------------------------------------------
+
+class TestAgentExecution:
+    """Preflight: the Claude Code agent authenticated and actually ran.
+
+    Defined first so it runs before any workflow assertion. If the agent
+    never started — e.g. an invalid ANTHROPIC_API_KEY — then config.yaml,
+    state.json and every spec file will be missing, and the downstream
+    failures are misleading ("config.yaml missing — init not run" when the
+    real cause is a 401). When this class fails, read it first: every other
+    failure in the run is a consequence.
+    """
+
+    def test_transcript_exists(self):
+        transcripts = sorted(AGENT_LOG_DIR.glob("*.txt"))
+        assert transcripts, (
+            f"No agent transcript under {AGENT_LOG_DIR} — the agent never ran."
+        )
+
+    def test_agent_authenticated(self):
+        failure = agent_auth_failure()
+        assert failure is None, (
+            "Agent failed to authenticate with the Anthropic API "
+            f"(api_error_status={failure.get('api_error_status')}): "
+            f"{failure.get('result') or failure.get('error')!r}. "
+            "Set a valid ANTHROPIC_API_KEY before running harbor — every "
+            "other failure in this run is a consequence of this."
+        )
+
+    def test_agent_run_succeeded(self):
+        results = agent_result_events()
+        assert results, (
+            "No `result` event in the transcript — the agent did not finish."
+        )
+        final = results[-1]
+        assert not final.get("is_error"), (
+            f"Agent run ended in error: {final.get('result')!r} "
+            f"(api_error_status={final.get('api_error_status')}, "
+            f"num_turns={final.get('num_turns')})."
+        )
+
+    def test_agent_did_work(self):
+        calls = extract_tool_calls()
+        assert calls, (
+            "Agent produced no tool calls — it never ran 'spektacular init' "
+            "or any workflow command. Check the transcript for an earlier "
+            "failure (often an auth error)."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Workflow-level tests
 # ---------------------------------------------------------------------------
