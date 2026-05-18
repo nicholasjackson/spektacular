@@ -3,4 +3,11 @@ agent: claude
 debug:
     enabled: true
 spec:
+    provider: file
     id_method: counter
+    config:
+        directory: specs
+plan:
+    provider: file
+    config:
+        directory: plans

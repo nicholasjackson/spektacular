@@ -20,10 +20,22 @@ func Init(projectPath string, force bool) error {
 		return fmt.Errorf(".spektacular directory already exists at %s; use --force to overwrite", spektacularDir)
 	}
 
+	// Resolve the spec and plan directories from an existing config.yaml, or
+	// fall back to the defaults when no config exists yet.
+	configPath := filepath.Join(spektacularDir, "config.yaml")
+	cfg := config.NewDefault()
+	if _, err := os.Stat(configPath); err == nil {
+		loaded, err := config.FromYAMLFile(configPath)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		cfg = loaded
+	}
+
 	dirs := []string{
 		spektacularDir,
-		filepath.Join(spektacularDir, "plans"),
-		filepath.Join(spektacularDir, "specs"),
+		filepath.Join(spektacularDir, cfg.Plan.Config.Directory),
+		filepath.Join(spektacularDir, cfg.Spec.Config.Directory),
 		filepath.Join(spektacularDir, "knowledge"),
 		filepath.Join(spektacularDir, "knowledge", "learnings"),
 		filepath.Join(spektacularDir, "knowledge", "architecture"),
@@ -36,9 +48,7 @@ func Init(projectPath string, force bool) error {
 	}
 
 	// Write default config.yaml only if it does not already exist.
-	configPath := filepath.Join(spektacularDir, "config.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		cfg := config.NewDefault()
 		if err := cfg.ToYAMLFile(configPath); err != nil {
 			return fmt.Errorf("writing config: %w", err)
 		}

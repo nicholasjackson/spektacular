@@ -183,18 +183,19 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	st := store.NewFileStore(dataDir)
+	st := store.NewFileStore(dataDir, "project")
 	extraData := workflowDataBuffer{}
 	if err := readInputIntoWorkflow(cmd, extraData); err != nil {
 		return err
 	}
 
 	resolved, err := spec.ResolveIdentifier(spec.IdentifierRequest{
-		Name:   input.Name,
-		ID:     input.ID,
-		Method: cfg.Spec.IDMethod,
-		Store:  st,
-		Now:    specIdentifierNow,
+		Name:    input.Name,
+		ID:      input.ID,
+		Method:  cfg.Spec.IDMethod,
+		SpecDir: cfg.Spec.Config.Directory,
+		Store:   st,
+		Now:     specIdentifierNow,
 	})
 	if err != nil {
 		return err
@@ -207,7 +208,7 @@ func runSpecNew(cmd *cobra.Command, _ []string) error {
 		_ = os.Remove(statePath)
 	}
 
-	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun, SpecDir: cfg.Spec.Config.Directory, PlanDir: cfg.Plan.Config.Directory}
 	steps := spec.Steps()
 	out := output.New(cmd.OutOrStdout(), globalFields)
 	wf := workflow.New(steps, statePath, wfCfg, st, out)
@@ -263,10 +264,10 @@ func runSpecGoto(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun}
+	wfCfg := workflow.Config{Command: cfg.Command, DryRun: dryRun, SpecDir: cfg.Spec.Config.Directory, PlanDir: cfg.Plan.Config.Directory}
 	steps := spec.Steps()
 	out := output.New(cmd.OutOrStdout(), globalFields)
-	wf := workflow.New(steps, stateFilePath(dataDir), wfCfg, store.NewFileStore(dataDir), out)
+	wf := workflow.New(steps, stateFilePath(dataDir), wfCfg, store.NewFileStore(dataDir, "project"), out)
 
 	for k, v := range input {
 		if k != "step" {
@@ -294,13 +295,17 @@ func runSpecStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
 
 	steps := spec.Steps()
 	wf := workflow.New(steps, stateFilePath(dataDir), workflow.Config{}, nil, nil)
 	st := wf.State()
 
 	specName, _ := wf.GetData("name")
-	specPath := filepath.Join(dataDir, spec.SpecFilePath(fmt.Sprintf("%v", specName)))
+	specPath := filepath.Join(dataDir, spec.SpecFilePath(cfg.Spec.Config.Directory, fmt.Sprintf("%v", specName)))
 
 	stepInfos := wf.StepStatus()
 	entries := make([]spec.StepEntry, len(stepInfos))

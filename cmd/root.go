@@ -64,6 +64,7 @@ func init() {
 	rootCmd.AddCommand(specCmd)
 	rootCmd.AddCommand(planCmd)
 	rootCmd.AddCommand(implementCmd)
+	rootCmd.AddCommand(knowledgeCmd)
 	rootCmd.AddCommand(skillCmd)
 	rootCmd.AddCommand(initCmd)
 }

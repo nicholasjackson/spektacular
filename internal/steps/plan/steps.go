@@ -8,19 +8,22 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/workflow"
 )
 
-// PlanFilePath returns the store-relative path for a plan file.
-func PlanFilePath(name string) string {
-	return "plans/" + name + "/plan.md"
+// PlanFilePath returns the store-relative path for a plan file under the
+// configured plan directory.
+func PlanFilePath(dir, name string) string {
+	return dir + "/" + name + "/plan.md"
 }
 
-// ContextFilePath returns the store-relative path for a plan's context file.
-func ContextFilePath(name string) string {
-	return "plans/" + name + "/context.md"
+// ContextFilePath returns the store-relative path for a plan's context file
+// under the configured plan directory.
+func ContextFilePath(dir, name string) string {
+	return dir + "/" + name + "/context.md"
 }
 
-// ResearchFilePath returns the store-relative path for a plan's research file.
-func ResearchFilePath(name string) string {
-	return "plans/" + name + "/research.md"
+// ResearchFilePath returns the store-relative path for a plan's research file
+// under the configured plan directory.
+func ResearchFilePath(dir, name string) string {
+	return dir + "/" + name + "/research.md"
 }
 
 // Steps returns the ordered step configs for a plan workflow.
@@ -65,7 +68,7 @@ func writeStep(stepName, nextStep, templatePath string, data workflow.Data, out 
 			StepName:     stepName,
 			NextStep:     nextStep,
 			TemplatePath: templatePath,
-			Strategy:     strategy{},
+			Strategy:     strategy{planDir: cfg.PlanDir, specDir: cfg.SpecDir},
 			Extra:        extra,
 		},
 		data, out, st, cfg,
@@ -184,7 +187,7 @@ func writePlan() workflow.StepCallback {
 			return "", fmt.Errorf("plan_template missing — submit the filled plan.md via --file or --stdin plan_template")
 		}
 		if !cfg.DryRun {
-			if err := st.Write(PlanFilePath(planName), []byte(content)); err != nil {
+			if err := st.Write(PlanFilePath(cfg.PlanDir, planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
@@ -201,7 +204,7 @@ func writeContext() workflow.StepCallback {
 			return "", fmt.Errorf("context_template missing — submit the filled context.md via --file or --stdin context_template")
 		}
 		if !cfg.DryRun {
-			if err := st.Write(ContextFilePath(planName), []byte(content)); err != nil {
+			if err := st.Write(ContextFilePath(cfg.PlanDir, planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
@@ -218,7 +221,7 @@ func writeResearch() workflow.StepCallback {
 			return "", fmt.Errorf("research_template missing — submit the filled research.md via --file or --stdin research_template")
 		}
 		if !cfg.DryRun {
-			if err := st.Write(ResearchFilePath(planName), []byte(content)); err != nil {
+			if err := st.Write(ResearchFilePath(cfg.PlanDir, planName), []byte(content)); err != nil {
 				return "", err
 			}
 		}
@@ -232,7 +235,7 @@ func finished() workflow.StepCallback {
 			return "", writeStep("finished", "", "steps/plan/17-finished.md", data, out, st, cfg, nil)
 		}
 		planName := stepkit.GetString(data, "name")
-		for _, p := range []string{PlanFilePath(planName), ContextFilePath(planName), ResearchFilePath(planName)} {
+		for _, p := range []string{PlanFilePath(cfg.PlanDir, planName), ContextFilePath(cfg.PlanDir, planName), ResearchFilePath(cfg.PlanDir, planName)} {
 			if !st.Exists(p) {
 				return "", fmt.Errorf("expected file %s not found — the preceding write step should have written it", p)
 			}

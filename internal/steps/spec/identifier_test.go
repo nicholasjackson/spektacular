@@ -10,12 +10,17 @@ import (
 
 func identifierStore(t *testing.T) store.Store {
 	t.Helper()
-	return store.NewFileStore(t.TempDir())
+	return store.NewFileStore(t.TempDir(), "project")
 }
 
 func writeExistingSpec(t *testing.T, st store.Store, name string) {
 	t.Helper()
-	require.NoError(t, st.Write(SpecFilePath(name), []byte("existing")))
+	writeExistingSpecIn(t, st, "specs", name)
+}
+
+func writeExistingSpecIn(t *testing.T, st store.Store, dir, name string) {
+	t.Helper()
+	require.NoError(t, st.Write(SpecFilePath(dir, name), []byte("existing")))
 }
 
 func fixedIdentifierTime() time.Time {
@@ -120,6 +125,27 @@ func TestResolveIdentifier_CounterCollisionBumpsValue(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "000009_billing-export", got.Name)
+}
+
+// TestResolveIdentifier_CounterEnumeratesConfiguredSpecDir asserts that counter
+// resolution scans the configured (non-default) spec directory for existing
+// specs (Phase 2.2, criterion 1).
+func TestResolveIdentifier_CounterEnumeratesConfiguredSpecDir(t *testing.T) {
+	st := identifierStore(t)
+	// Existing counter-prefixed spec under the non-default directory.
+	writeExistingSpecIn(t, st, "my-specs", "000007_old-feature")
+	// A decoy under the default "specs" dir must be ignored.
+	writeExistingSpecIn(t, st, "specs", "000099_decoy")
+
+	got, err := ResolveIdentifier(IdentifierRequest{
+		Name:    "billing-export",
+		Method:  IDMethodCounter,
+		SpecDir: "my-specs",
+		Store:   st,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "000008_billing-export", got.Name)
 }
 
 func TestResolveIdentifier_ExplicitIDOverridesGeneratedMethod(t *testing.T) {

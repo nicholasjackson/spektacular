@@ -51,7 +51,7 @@ func runSpecFileWrite(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("reading stdin: %w", err)
 	}
-	return store.NewFileStore(dataDir).Write(args[0], content)
+	return store.NewFileStore(dataDir, "project").Write(args[0], content)
 }
 
 func runSpecFileRead(cmd *cobra.Command, args []string) error {
@@ -59,7 +59,7 @@ func runSpecFileRead(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	content, err := store.NewFileStore(dataDir).Read(args[0])
+	content, err := store.NewFileStore(dataDir, "project").Read(args[0])
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func runSpecFileDelete(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return store.NewFileStore(dataDir).Delete(args[0])
+	return store.NewFileStore(dataDir, "project").Delete(args[0])
 }
 
 func runSpecFileList(cmd *cobra.Command, args []string) error {
@@ -84,11 +84,15 @@ func runSpecFileList(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		path = args[0]
 	}
-	entries, err := store.NewFileStore(dataDir).List(path)
+	entries, err := store.NewFileStore(dataDir, "project").List(path)
 	if err != nil {
 		return err
 	}
-	return output.Write(cmd.OutOrStdout(), map[string]any{"files": entries}, "")
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name
+	}
+	return output.Write(cmd.OutOrStdout(), map[string]any{"files": names}, "")
 }
 
 func init() {

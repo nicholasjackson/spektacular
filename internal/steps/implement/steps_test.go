@@ -36,7 +36,7 @@ func renderStep(t *testing.T, cb workflow.StepCallback) string {
 	t.Helper()
 	data := &testData{values: map[string]any{"name": "test"}}
 	writer := &captureWriter{}
-	st := store.NewFileStore(t.TempDir())
+	st := store.NewFileStore(t.TempDir(), "project")
 	_, err := cb(data, writer, st, workflow.Config{Command: "spektacular"})
 	require.NoError(t, err)
 	return writer.result.Instruction
@@ -76,7 +76,7 @@ func TestAnalyzeStepHasMultiSourceTransition(t *testing.T) {
 func TestFSMWalkFromNewToFinished(t *testing.T) {
 	tmp := t.TempDir()
 	statePath := filepath.Join(tmp, "state.json")
-	st := store.NewFileStore(tmp)
+	st := store.NewFileStore(tmp, "project")
 	writer := &captureWriter{}
 
 	wf := workflow.New(Steps(), statePath, workflow.Config{Command: "spektacular", DryRun: true}, st, writer)
@@ -112,7 +112,7 @@ func TestFSMWalkFromNewToFinished(t *testing.T) {
 func TestFSMLoopFromUpdateChangelogBackToAnalyze(t *testing.T) {
 	tmp := t.TempDir()
 	statePath := filepath.Join(tmp, "state.json")
-	st := store.NewFileStore(tmp)
+	st := store.NewFileStore(tmp, "project")
 	writer := &captureWriter{}
 
 	wf := workflow.New(Steps(), statePath, workflow.Config{Command: "spektacular", DryRun: true}, st, writer)
@@ -277,6 +277,15 @@ func TestStopOnMismatchDirectivePresentInEveryNonTerminalTemplate(t *testing.T) 
 		out := renderStep(t, cb)
 		require.Contains(t, strings.ToUpper(out), "STOP", "%s template must contain a STOP directive", name)
 	}
+}
+
+// TestPlanFilePaths_UseConfiguredDirectory asserts the implement path helpers
+// root plan, context and research files under the given directory argument
+// (Phase 2.2).
+func TestPlanFilePaths_UseConfiguredDirectory(t *testing.T) {
+	require.Equal(t, "my-plans/x/plan.md", PlanFilePath("my-plans", "x"))
+	require.Equal(t, "my-plans/x/context.md", ContextFilePath("my-plans", "x"))
+	require.Equal(t, "my-plans/x/research.md", ResearchFilePath("my-plans", "x"))
 }
 
 func TestFinishedStepEmitsNoGoto(t *testing.T) {

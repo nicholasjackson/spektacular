@@ -8,9 +8,10 @@ import (
 	"github.com/jumppad-labs/spektacular/internal/workflow"
 )
 
-// SpecFilePath returns the store-relative path for a spec file.
-func SpecFilePath(name string) string {
-	return "specs/" + name + ".md"
+// SpecFilePath returns the store-relative path for a spec file under the
+// configured spec directory.
+func SpecFilePath(dir, name string) string {
+	return dir + "/" + name + ".md"
 }
 
 // Steps returns the ordered step configs for a spec workflow.
@@ -50,7 +51,7 @@ func writeStep(stepName, nextStep, templatePath string, data workflow.Data, out 
 			StepName:     stepName,
 			NextStep:     nextStep,
 			TemplatePath: templatePath,
-			Strategy:     strategy{},
+			Strategy:     strategy{specDir: cfg.SpecDir},
 			Extra:        extra,
 		},
 		data, out, st, cfg,
@@ -73,7 +74,7 @@ func new() workflow.StepCallback {
 		if err != nil {
 			return "", err
 		}
-		if err := st.Write(SpecFilePath(name), []byte(rendered)); err != nil {
+		if err := st.Write(SpecFilePath(cfg.SpecDir, name), []byte(rendered)); err != nil {
 			return "", err
 		}
 		return "overview", nil
@@ -138,7 +139,7 @@ func verification() workflow.StepCallback {
 func finished() workflow.StepCallback {
 	return func(data workflow.Data, out workflow.ResultWriter, st store.Store, cfg workflow.Config) (string, error) {
 		specName := stepkit.GetString(data, "name")
-		specPath := SpecFilePath(specName)
+		specPath := SpecFilePath(cfg.SpecDir, specName)
 		if content := stepkit.GetString(data, "spec_template"); content != "" {
 			if err := st.Write(specPath, []byte(content)); err != nil {
 				return "", err
