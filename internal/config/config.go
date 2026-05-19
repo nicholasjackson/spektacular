@@ -113,9 +113,20 @@ func NewDefault() Config {
 				Directory: DefaultPlanDir,
 			},
 		},
-		// Knowledge.Sources is left empty so a freshly written config.yaml
-		// stays minimal; the default project source is synthesised on demand
-		// by KnowledgeConfig.WithDefaults.
+		Knowledge: KnowledgeConfig{
+			// The project knowledge source is configured by default so a
+			// freshly written config.yaml shows it explicitly. Team and
+			// global sources are opt-in additions the user configures by hand.
+			Sources: []SourceConfig{
+				{
+					Scope:    DefaultKnowledgeScope,
+					Provider: ProviderFile,
+					Config: FileKnowledgeConfig{
+						Location: DefaultKnowledgeLocation,
+					},
+				},
+			},
+		},
 	}
 }
 

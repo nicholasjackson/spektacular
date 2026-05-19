@@ -138,3 +138,52 @@ func TestInit_NonDefaultConfig_CreatesConfiguredDirs(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, ".spektacular", "plans"))
 	require.True(t, os.IsNotExist(err), "default plans dir should not be created")
 }
+
+// TestInit_CreatesProjectKnowledgeSourceOnly asserts that Init creates the
+// directory for the configured project knowledge source but leaves team and
+// global sources alone — those are shared and expected to exist independently.
+func TestInit_CreatesProjectKnowledgeSourceOnly(t *testing.T) {
+	dir := t.TempDir()
+	spektacularDir := filepath.Join(dir, ".spektacular")
+	require.NoError(t, os.MkdirAll(spektacularDir, 0755))
+
+	cfg := config.NewDefault()
+	cfg.Knowledge = config.KnowledgeConfig{
+		Sources: []config.SourceConfig{
+			{
+				Scope:    "project",
+				Provider: config.ProviderFile,
+				Config:   config.FileKnowledgeConfig{Location: ".spektacular/team-notes"},
+			},
+			{
+				Scope:    "team",
+				Provider: config.ProviderFile,
+				Config:   config.FileKnowledgeConfig{Location: "shared/team-kb"},
+			},
+		},
+	}
+	require.NoError(t, cfg.ToYAMLFile(filepath.Join(spektacularDir, "config.yaml")))
+
+	// Force is required because .spektacular already exists.
+	require.NoError(t, Init(dir, true))
+
+	// The project source's configured directory is created.
+	info, err := os.Stat(filepath.Join(dir, ".spektacular", "team-notes"))
+	require.NoError(t, err, "project knowledge source directory should be created")
+	require.True(t, info.IsDir())
+
+	// The team source's directory is NOT created by init.
+	_, err = os.Stat(filepath.Join(dir, "shared", "team-kb"))
+	require.True(t, os.IsNotExist(err), "team knowledge source dir should not be created by init")
+}
+
+// TestInit_DefaultConfig_CreatesProjectKnowledgeDir asserts that with no
+// knowledge config the synthesised default project source directory exists.
+func TestInit_DefaultConfig_CreatesProjectKnowledgeDir(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, Init(dir, false))
+
+	info, err := os.Stat(filepath.Join(dir, ".spektacular", "knowledge"))
+	require.NoError(t, err, "default project knowledge directory should exist")
+	require.True(t, info.IsDir())
+}

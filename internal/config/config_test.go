@@ -141,13 +141,16 @@ func TestFromYAMLFile_AbsentProviderSectionsUseDefaults(t *testing.T) {
 	require.Equal(t, SpecIDMethodTimestamp, cfg.Spec.IDMethod)
 	require.Equal(t, ProviderFile, cfg.Plan.Provider)
 	require.Equal(t, DefaultPlanDir, cfg.Plan.Config.Directory)
-	require.Empty(t, cfg.Knowledge.Sources)
+	require.Len(t, cfg.Knowledge.Sources, 1)
+	require.Equal(t, DefaultKnowledgeScope, cfg.Knowledge.Sources[0].Scope)
+	require.Equal(t, ProviderFile, cfg.Knowledge.Sources[0].Provider)
+	require.Equal(t, DefaultKnowledgeLocation, cfg.Knowledge.Sources[0].Config.Location)
 }
 
-// Criterion 2: an absent knowledge section synthesises exactly one default
+// Criterion 2: an empty knowledge config synthesises exactly one default
 // project source via WithDefaults.
 func TestKnowledgeConfig_WithDefaultsSynthesisesProjectSource(t *testing.T) {
-	knowledge := NewDefault().Knowledge.WithDefaults("/some/root")
+	knowledge := KnowledgeConfig{}.WithDefaults("/some/root")
 
 	require.Len(t, knowledge.Sources, 1)
 	src := knowledge.Sources[0]

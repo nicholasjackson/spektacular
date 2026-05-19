@@ -11,3 +11,9 @@ plan:
     provider: file
     config:
         directory: plans
+knowledge:
+    sources:
+        - scope: project
+          provider: file
+          config:
+            location: .spektacular/knowledge
